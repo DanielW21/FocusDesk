@@ -7,7 +7,6 @@ import { WidgetRegistry } from "../widgets/widget-registry";
 import { FeatureRegistry } from "./feature-registry";
 
 export interface AppRegistries {
-  features: FeatureRegistry;
   widgets: WidgetRegistry;
   actions: ActionRegistry;
 }
@@ -21,5 +20,5 @@ export function createAppRegistries(): AppRegistries {
   for (const action of createTaskManagerActions(createTaskManagerClient())) {
     actions.register(action);
   }
-  return { features, widgets, actions };
+  return { widgets, actions };
 }

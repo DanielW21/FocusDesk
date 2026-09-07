@@ -25,12 +25,4 @@ export class FeatureRegistry {
 
     this.#features.set(manifest.id, feature);
   }
-
-  get(featureId: string): FeatureDefinition | undefined {
-    return this.#features.get(featureId);
-  }
-
-  list(): readonly FeatureDefinition[] {
-    return [...this.#features.values()];
-  }
 }
