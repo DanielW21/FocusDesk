@@ -175,4 +175,51 @@ describe("calendar sync", () => {
       date: "2026-09-09",
     });
   });
+
+  it("removes cached events from calendars excluded from a full sync", () => {
+    const next = reconcileGoogleCalendarSync(
+      [
+        {
+          id: 7,
+          title: "Portal copy",
+          date: "2026-09-09",
+          time: "11:00",
+          source: "google",
+          googleCalendarId: "portal",
+          googleEventId: "portal-event",
+        },
+        {
+          id: 8,
+          title: "Selected event",
+          date: "2026-09-09",
+          time: "11:00",
+          source: "google",
+          googleCalendarId: "3b",
+          googleEventId: "selected-event",
+        },
+      ],
+      {
+        connected: true,
+        calendarId: "3b",
+        events: [
+          {
+            id: "selected-event",
+            calendarId: "3b",
+            title: "Selected event updated",
+            date: "2026-09-09",
+            time: "11:00",
+          },
+        ],
+        deleted: [],
+      },
+      true,
+      ["3b"],
+    );
+
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({
+      googleCalendarId: "3b",
+      title: "Selected event updated",
+    });
+  });
 });

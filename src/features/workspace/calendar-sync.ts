@@ -126,12 +126,8 @@ export function reconcileGoogleCalendarSync(
     if (deletedIds.some((deleted) => matchesGoogleEvent(event, deleted))) {
       return false;
     }
-    if (
-      fullSync &&
-      event.source === "google" &&
-      event.googleCalendarId &&
-      syncedCalendarIds.has(event.googleCalendarId)
-    ) {
+    if (fullSync && event.source === "google" && event.googleCalendarId) {
+      if (!syncedCalendarIds.has(event.googleCalendarId)) return false;
       return result.events.some((snapshot) =>
         matchesGoogleEvent(event, snapshot),
       );

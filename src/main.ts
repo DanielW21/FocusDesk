@@ -238,6 +238,7 @@ async function initializeNativeWorkspace(): Promise<void> {
       applySettings();
     }
 
+    purgeUnselectedGoogleEvents();
     nativeWorkspaceReady = true;
     appDatabase.save(state);
   } catch (error: unknown) {
@@ -603,6 +604,12 @@ function setGoogleCalendarSelection(
   };
   state.settings.googleCalendarSelectionInitialized = true;
   googleCalendarSelectionInitialized = true;
+  if (!selected) {
+    state.events = state.events.filter(
+      (event) =>
+        event.source !== "google" || event.googleCalendarId !== calendarId,
+    );
+  }
   appDatabase.save(state);
   void refreshGoogleCalendar();
 }
@@ -904,6 +911,19 @@ function waterlooWorksView(): string {
   return `<div class="view-wrap">${waterlooWorksController.render()}</div>`;
 }
 
+function isVisibleCalendarEvent(event: CalendarEvent): boolean {
+  return (
+    !event.googleCalendarId ||
+    state.settings.googleCalendarIds.includes(event.googleCalendarId)
+  );
+}
+
+function purgeUnselectedGoogleEvents(): void {
+  state.events = state.events.filter(
+    (event) => event.source !== "google" || isVisibleCalendarEvent(event),
+  );
+}
+
 function widgetStyleKey(widgetId: string): string {
   const segments = widgetId.split(".");
   return segments[segments.length - 1] ?? widgetId;
@@ -912,7 +932,7 @@ function widgetStyleKey(widgetId: string): string {
 function widgetData() {
   return {
     tasks: state.tasks,
-    events: state.events,
+    events: state.events.filter(isVisibleCalendarEvent),
     notes: state.notes,
     links: state.links,
     selectedDate,
@@ -1474,12 +1494,7 @@ function taskManagerView(): string {
 
 function eventsFor(date: string): string {
   return state.events
-    .filter(
-      (event) =>
-        event.date === date &&
-        (!event.googleCalendarId ||
-          state.settings.googleCalendarIds.includes(event.googleCalendarId)),
-    )
+    .filter((event) => event.date === date && isVisibleCalendarEvent(event))
     .map(
       (event) =>
         `<div class="event ${event.source === "focusdesk" ? "event-editable" : ""} ${event.source === "google" ? "google-event" : ""}"${calendarEventStyle(event)} ${event.source === "focusdesk" ? `data-action="edit-calendar-event" data-id="${event.id}" role="button" tabindex="0"` : ""}><div class="event-time">${escapeHtml(event.time || "ALL DAY")}</div><div class="event-body"><div class="event-title">${escapeHtml(event.title)}</div><div class="event-sub">${escapeHtml(event.calendar || (event.source === "google" ? "Google Calendar" : "Imported calendar"))}${event.source === "focusdesk" ? " · editable" : " · read-only"}</div></div></div>`,
@@ -1496,10 +1511,7 @@ function calendarView(): string {
   for (let day = 1; day <= days; day += 1) {
     const date = localDate(new Date(year, month, day));
     const events = state.events.filter(
-      (event) =>
-        event.date === date &&
-        (!event.googleCalendarId ||
-          state.settings.googleCalendarIds.includes(event.googleCalendarId)),
+      (event) => event.date === date && isVisibleCalendarEvent(event),
     );
     const tasks = state.tasks.filter((task) => task.date === date);
     cells += `<div class="day-cell ${date === localDate(now) ? "today-cell" : ""}"><button class="day-num ${date === localDate(now) ? "today-num" : ""}" data-action="select-date" data-date="${date}">${day}</button>${events.map((event) => `<div class="cal-event ${event.source === "focusdesk" ? "focusdesk-event" : "google-event"}"${calendarEventStyle(event)} ${event.source === "focusdesk" ? `data-action="edit-calendar-event" data-id="${event.id}" role="button" tabindex="0" title="Edit ${escapeHtml(event.title)}"` : `title="${escapeHtml(event.title)} · read-only"`}>${escapeHtml(event.title)}</div>`).join("")}${tasks.map((task) => `<div class="cal-event task-event">${task.done ? "✓ " : ""}${escapeHtml(task.title)}</div>`).join("")}</div>`;

@@ -46,6 +46,10 @@
     self.window.contentView = self.webView;
     [self.window center];
     [self.window setFrameAutosaveName:@"FocusDeskMainWindow"];
+    NSScreen *screen = [NSScreen mainScreen];
+    if (screen) {
+        [self.window setFrame:screen.visibleFrame display:NO];
+    }
 
     NSURL *webRoot = [[[NSBundle mainBundle] resourceURL] URLByAppendingPathComponent:@"web"];
     NSURL *indexURL = [webRoot URLByAppendingPathComponent:@"index.html"];
