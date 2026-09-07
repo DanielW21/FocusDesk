@@ -8,6 +8,10 @@ typedef void (^FDWaterlooWorksCompletion)(NSDictionary *response);
 /// accepted from the renderer. Completions are delivered on the main queue.
 @interface FDWaterlooWorksClient : NSObject
 - (void)request:(NSDictionary *)payload completion:(FDWaterlooWorksCompletion)completion;
+/// Returns setup state without ever returning evaluator secrets.
+- (void)evaluatorConfigurationStatusWithCompletion:(FDWaterlooWorksCompletion)completion;
+/// Stores validated evaluator input in FocusDesk's private application-support directory.
+- (void)saveEvaluatorConfiguration:(NSDictionary *)payload completion:(FDWaterlooWorksCompletion)completion;
 - (void)shutdown;
 @end
 

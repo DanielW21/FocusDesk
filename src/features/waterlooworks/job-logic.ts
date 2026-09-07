@@ -1,4 +1,5 @@
 import type { JobEntry } from "./model";
+import { timestampFromWaterlooWorks } from "./date-utils";
 
 export function escapeHtml(value: unknown): string {
   return String(value ?? "").replace(
@@ -135,7 +136,6 @@ export const defaultFilters = (): JobFilters => ({
   deadline: "",
   sort: "ai",
 });
-const timestamp = (value: unknown): number => Date.parse(String(value ?? ""));
 export function filterJobs(
   jobs: readonly JobEntry[],
   filters: JobFilters,
@@ -203,9 +203,9 @@ export function filterJobs(
         return false;
       if (
         f.deadline &&
-        (!Number.isFinite(timestamp(job.dates?.deadlineAt)) ||
-          timestamp(job.dates?.deadlineAt) >
-            timestamp(`${f.deadline}T23:59:59`))
+        (!Number.isFinite(timestampFromWaterlooWorks(job.dates?.deadlineAt)) ||
+          timestampFromWaterlooWorks(job.dates?.deadlineAt) >
+            timestampFromWaterlooWorks(`${f.deadline}T23:59:59`))
       )
         return false;
       return true;
@@ -215,8 +215,8 @@ export function filterJobs(
         return (a.job.jobTitle ?? "").localeCompare(b.job.jobTitle ?? "");
       if (f.sort === "deadline")
         return (
-          (timestamp(a.job.dates?.deadlineAt) || Infinity) -
-          (timestamp(b.job.dates?.deadlineAt) || Infinity)
+          (timestampFromWaterlooWorks(a.job.dates?.deadlineAt) || Infinity) -
+          (timestampFromWaterlooWorks(b.job.dates?.deadlineAt) || Infinity)
         );
       const value = (entry: JobEntry): number =>
         f.sort === "pay"
@@ -226,7 +226,7 @@ export function filterJobs(
             : f.sort === "category"
               ? Number(entry.grade?.categoryScores?.[f.category]) || 0
               : f.sort === "newest"
-                ? timestamp(entry.lastSeenAt) || 0
+                ? timestampFromWaterlooWorks(entry.lastSeenAt) || 0
                 : (entry.grade?.totalScore ?? -1);
       return value(b) - value(a);
     });

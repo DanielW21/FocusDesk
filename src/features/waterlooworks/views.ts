@@ -16,6 +16,7 @@ import {
   type PageConfig,
   type Run,
 } from "./model";
+import { formatWaterlooWorksDate } from "./date-utils";
 
 export type PageTab = "review" | "jobs" | "ratings" | "activity";
 export interface PageState {
@@ -45,13 +46,7 @@ export const PAGE_SIZE = 50;
 const names = ["Ignore", "Maybe", "Not bad", "Good", "Excellent"];
 const label = (text: string): string =>
   text.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
-const date = (value: unknown): string => {
-  if (!value) return "—";
-  const parsed = new Date(String(value));
-  return Number.isNaN(parsed.valueOf())
-    ? String(value)
-    : parsed.toLocaleDateString("en-CA");
-};
+const date = formatWaterlooWorksDate;
 function button(
   action: string,
   text: string,
@@ -130,19 +125,23 @@ function rankButtons(
   const key = esc(jobKey(entry));
   return `<div class="ww-ranks" aria-label="Manual rank">${names.map((name, i) => `<button type="button" data-ww-rank="${i + 1}" data-ww-key="${key}" data-ww-origin="${drawer ? "drawer" : "review"}" aria-pressed="${entry.rating === i + 1}" ${state.saving || state.preview ? "disabled" : ""}><b>${i + 1}</b><span>${name}</span></button>`).join("")}</div>${entry.rating != null ? button("unrank", "Clear this rank", state.saving || state.preview, `data-ww-key="${key}"`) : ""}`;
 }
-function richDetails(value: unknown, depth = 0): string {
+function richDetails(value: unknown, depth = 0, fieldName = ""): string {
   if (value == null) return "";
+  if (isDateField(fieldName)) return `<span>${esc(date(value))}</span>`;
   if (depth > 8) return `<p>${esc(displayText(value))}</p>`;
   if (Array.isArray(value))
-    return `<ul>${value.map((item) => `<li>${richDetails(item, depth + 1)}</li>`).join("")}</ul>`;
+    return `<ul>${value.map((item) => `<li>${richDetails(item, depth + 1, fieldName)}</li>`).join("")}</ul>`;
   if (typeof value === "object")
     return `<dl class="ww-rich-fields">${Object.entries(value)
       .map(
         ([key, item]) =>
-          `<dt>${esc(label(key))}</dt><dd>${richDetails(item, depth + 1)}</dd>`,
+          `<dt>${esc(label(key))}</dt><dd>${richDetails(item, depth + 1, key)}</dd>`,
       )
       .join("")}</dl>`;
   return `<span>${esc(value)}</span>`;
+}
+function isDateField(fieldName: string): boolean {
+  return /(?:deadline|date|time|(?:^|_)at)$/i.test(fieldName);
 }
 function companyOverview(entry: JobEntry, jobs: JobEntry[]): string {
   const company = displayText(entry.job.company?.name) || "Company not listed";

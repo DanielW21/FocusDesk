@@ -17,6 +17,17 @@ const jobs = Array.from({ length: 6 }, (_, index) => ({
 }));
 let runs = [];
 let failRating = false;
+let evaluatorStatus = {
+  apiKeyConfigured: false,
+  complete: false,
+  files: {
+    "profile.json": false,
+    "candidate-context.md": false,
+    "category-guidance.md": false,
+    "instructions.md": false,
+    "schema.json": false,
+  },
+};
 try {
   browser = await puppeteer.launch({ headless: true, executablePath: process.env.PUPPETEER_EXECUTABLE_PATH });
   const page = await browser.newPage();
@@ -28,6 +39,12 @@ try {
     if (action === "focusdesk.workspace.save") return { saved: true };
     if (action === "focusdesk.tasks.bootstrap") return { tasks: payload.tasks };
     if (action === "focusdesk.tasks.list") return { tasks: [] };
+    if (action === "waterlooworks.config.status") return evaluatorStatus;
+    if (action === "waterlooworks.config.save") {
+      assert.equal(payload.apiKey, "test-secret", "Evaluator key is passed only to the native bridge");
+      evaluatorStatus = { ...evaluatorStatus, apiKeyConfigured: true };
+      return evaluatorStatus;
+    }
     if (action !== "waterlooworks.request") throw new Error("Not configured in smoke test");
     calls.push(payload);
     const { method, path, body } = payload;
@@ -75,8 +92,14 @@ try {
   failRating = false;
   await page.click('[data-view="today"]');
   await page.waitForFunction(() => document.querySelector('.widget-jobs')?.textContent.includes("5"));
+  await page.click('[data-view="settings"]');
+  await page.waitForSelector("#waterlooworks-evaluator-api-key");
+  await page.locator("#waterlooworks-evaluator-api-key").fill("test-secret");
+  await page.click('[data-action="waterlooworks-save-evaluator"]');
+  await page.waitForFunction(() => document.querySelector("#view-root")?.textContent.includes("Saved."));
+  assert.equal(evaluatorStatus.apiKeyConfigured, true, "Settings should save evaluator secrets through the native bridge");
   assert.deepEqual(errors, []);
-  console.log("WaterlooWorks UI smoke passed: startup, widget, page navigation, sanitized content, persisted rank, failed save, updated count.");
+  console.log("WaterlooWorks UI smoke passed: startup, widget, page navigation, evaluator setup, sanitized content, persisted rank, failed save, updated count.");
 } finally {
   await browser?.close();
   await server.close();

@@ -540,20 +540,77 @@ kbd {
     monospace;
   letter-spacing: 0.8px;
 }
-.link-card-heading { display: flex; align-items: center; gap: 11px; min-width: 0; }
-.link-card-heading > div { min-width: 0; }
-.link-card-heading .link-type { margin-bottom: 5px; }
-.link-card-heading h3 { margin-bottom: 0; }
-.link-card-asset.quick-link-asset { display: grid; width: 43px; height: 43px; flex: none; place-items: center; border: 1px solid var(--line); border-radius: 13px; color: white; background: var(--quick-link-color, #778e80); font-size: 11px; font-weight: 700; }
-.link-card-asset .quick-link-asset-text { font-size: 16px; }
-.link-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
-.link-card { min-height: 0; }
-.color-input { width: 52px; height: 38px; padding: 3px; border: 1px solid var(--line); border-radius: 7px; background: white; cursor: pointer; }
-.form-hint { display: block; margin-top: 7px; color: #9aa49d; font-size: 11px; }
-.link-description { overflow: hidden; margin: 14px 0 8px; color: #7e8981; font-size: 11px; text-overflow: ellipsis; white-space: nowrap; }
-.link-card .link-url { padding-right: 28px; }
-.link-card .card-actions { z-index: 1; display: flex; gap: 2px; }
-.link-card .card-actions button { padding: 2px; }
+.link-card-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  min-width: 0;
+}
+.link-card-heading > div {
+  min-width: 0;
+}
+.link-card-heading .link-type {
+  margin-bottom: 5px;
+}
+.link-card-heading h3 {
+  margin-bottom: 0;
+}
+.link-card-asset.quick-link-asset {
+  display: grid;
+  width: 43px;
+  height: 43px;
+  flex: none;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  color: white;
+  background: var(--quick-link-color, #778e80);
+  font-size: 11px;
+  font-weight: 700;
+}
+.link-card-asset .quick-link-asset-text {
+  font-size: 16px;
+}
+.link-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+.link-card {
+  min-height: 0;
+}
+.color-input {
+  width: 52px;
+  height: 38px;
+  padding: 3px;
+  border: 1px solid var(--line);
+  border-radius: 7px;
+  background: white;
+  cursor: pointer;
+}
+.form-hint {
+  display: block;
+  margin-top: 7px;
+  color: #9aa49d;
+  font-size: 11px;
+}
+.link-description {
+  overflow: hidden;
+  margin: 14px 0 8px;
+  color: #7e8981;
+  font-size: 11px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.link-card .link-url {
+  padding-right: 28px;
+}
+.link-card .card-actions {
+  z-index: 1;
+  display: flex;
+  gap: 2px;
+}
+.link-card .card-actions button {
+  padding: 2px;
+}
 .note-card,
 .link-card {
   box-shadow: var(--shadow-sm);
@@ -568,7 +625,9 @@ kbd {
 }
 
 @media (max-width: 800px) {
-  .link-grid { grid-template-columns: 1fr; }
+  .link-grid {
+    grid-template-columns: 1fr;
+  }
 }
 
 .modal-backdrop {
@@ -1181,6 +1240,7 @@ html[data-accent="gold"] {
   line-height: 1.4;
 }
 .settings-field select,
+.settings-field input,
 .settings-dimension select {
   width: 100%;
   min-height: 35px;
@@ -1193,10 +1253,70 @@ html[data-accent="gold"] {
   cursor: pointer;
 }
 .settings-field select:focus,
+.settings-field input:focus,
 .settings-dimension select:focus {
   border-color: #9fb2a3;
   outline: 0;
   box-shadow: 0 0 0 3px rgba(113, 146, 123, 0.1);
+}
+.waterlooworks-evaluator-copy {
+  display: grid;
+  gap: 4px;
+  margin: -4px 0 16px;
+}
+.waterlooworks-evaluator-copy p {
+  margin: 0;
+  color: var(--ink);
+  font-size: 12px;
+}
+.waterlooworks-evaluator-copy small,
+.waterlooworks-evaluator-message {
+  color: #929d95;
+  font-size: 10px;
+  line-height: 1.45;
+}
+.waterlooworks-evaluator-fields .settings-field input {
+  box-sizing: border-box;
+  width: 100%;
+  min-height: 35px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  color: var(--ink);
+  background: var(--surface-subtle);
+  font-size: 11px;
+}
+.waterlooworks-evaluator-import {
+  display: flex;
+  align-items: end;
+  gap: 14px;
+  margin-top: 15px;
+}
+.waterlooworks-evaluator-import details {
+  flex: 1;
+  min-width: 0;
+}
+.waterlooworks-evaluator-import summary {
+  color: #929d95;
+  font-size: 10px;
+  cursor: pointer;
+}
+.waterlooworks-evaluator-import details .settings-field {
+  margin-top: 10px;
+}
+.waterlooworks-evaluator-import .settings-field {
+  flex: 1;
+}
+.waterlooworks-evaluator-import input[type="file"] {
+  padding: 7px 10px;
+}
+.waterlooworks-evaluator-import .primary-button {
+  flex: none;
+  margin-bottom: 0;
+}
+.waterlooworks-evaluator-message {
+  margin: 12px 0 0;
+  color: #7e9a84;
 }
 .settings-field-stack {
   display: grid;

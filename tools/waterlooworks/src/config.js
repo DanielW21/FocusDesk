@@ -27,7 +27,7 @@ function loadGradeConfig(options = {}) {
   const directory = configDirectory(options);
   const env = localEnvironment(directory, options.env);
   if (!env.DEEPSEEK_API_KEY) throw configurationError(`Set DEEPSEEK_API_KEY in ${directory}/.env.local or the process environment.`);
-  const files = ["profile.json", "candidate-context.md", "category-guidance.md", "instructions.md", "schema.json"];
+  const files = [fs.existsSync(path.join(directory, "profile.json")) ? "profile.json" : "profile.example.json", "candidate-context.md", "category-guidance.md", "instructions.md", "schema.json"];
   const content = files.map(name => {
     try {
       const value = fs.readFileSync(path.join(directory, name), "utf8");
@@ -38,7 +38,7 @@ function loadGradeConfig(options = {}) {
   try {
     z.record(z.string(), z.unknown()).parse(JSON.parse(content[0]));
     z.record(z.string(), z.unknown()).parse(JSON.parse(content[4]));
-  } catch { throw configurationError("profile.json and schema.json must contain valid JSON objects."); }
+  } catch { throw configurationError("profile.json (or profile.example.json) and schema.json must contain valid JSON objects."); }
   const [profile, context, guidance, instructions, schema] = content;
   const endpoint = env.DEEPSEEK_BASE_URL || "https://api.deepseek.com/chat/completions";
   try { if (new URL(endpoint).protocol !== "https:") throw new Error(); }

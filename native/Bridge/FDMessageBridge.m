@@ -123,7 +123,9 @@ static NSString *const FDNativeBridgeVersion = @"1";
         return;
     }
 
-    if ([action isEqualToString:@"waterlooworks.request"]) {
+    if ([action isEqualToString:@"waterlooworks.request"] ||
+        [action isEqualToString:@"waterlooworks.config.status"] ||
+        [action isEqualToString:@"waterlooworks.config.save"]) {
         NSURL *resourceRoot = [[[NSBundle mainBundle] resourceURL] URLByAppendingPathComponent:@"web" isDirectory:YES];
         NSURL *frameURL = message.frameInfo.request.URL;
         NSString *trustedPrefix = [resourceRoot.URLByResolvingSymlinksInPath.path stringByAppendingString:@"/"];
@@ -133,11 +135,23 @@ static NSString *const FDNativeBridgeVersion = @"1";
                                           message:@"WaterlooWorks is available only to the bundled FocusDesk page."], nil);
             return;
         }
-        [self.waterlooWorksClient request:payload completion:^(NSDictionary *response) {
+        FDWaterlooWorksCompletion complete = ^(NSDictionary *response) {
             NSMutableDictionary *envelope = [response mutableCopy];
             envelope[@"id"] = requestId;
             replyHandler(envelope, nil);
-        }];
+        };
+        if ([action isEqualToString:@"waterlooworks.request"]) {
+            [self.waterlooWorksClient request:payload completion:complete];
+        } else if ([action isEqualToString:@"waterlooworks.config.status"]) {
+            if (payload.count != 0) {
+                replyHandler([self errorResponseWithId:requestId code:@"INVALID_REQUEST"
+                                              message:@"Evaluator status does not accept input."], nil);
+                return;
+            }
+            [self.waterlooWorksClient evaluatorConfigurationStatusWithCompletion:complete];
+        } else {
+            [self.waterlooWorksClient saveEvaluatorConfiguration:payload completion:complete];
+        }
         return;
     }
 

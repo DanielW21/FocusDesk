@@ -13,6 +13,49 @@ static NSDictionary *FDWWError(NSString *code, NSString *message) {
     return @{ @"ok": @NO, @"error": @{ @"code": code, @"message": message } };
 }
 
+static NSArray<NSString *> *FDWWEvaluatorFiles(void) {
+    static NSArray<NSString *> *files;
+    static dispatch_once_t onceToken;
+    dispatch_once(&onceToken, ^{
+        files = @[ @"profile.json", @"candidate-context.md", @"category-guidance.md", @"instructions.md", @"schema.json" ];
+    });
+    return files;
+}
+
+static NSString *FDWWEnvironmentValue(NSString *contents, NSString *name) {
+    for (NSString *line in [contents componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+        NSRange equals = [line rangeOfString:@"="];
+        if (equals.location == NSNotFound) continue;
+        NSString *key = [[line substringToIndex:equals.location] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if ([key hasPrefix:@"export "]) key = [[key substringFromIndex:7] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if (![key isEqualToString:name]) continue;
+        NSString *value = [[line substringFromIndex:equals.location + 1] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if (value.length >= 2 && (([value hasPrefix:@"\""] && [value hasSuffix:@"\""]) || ([value hasPrefix:@"'"] && [value hasSuffix:@"'"])))
+            value = [value substringWithRange:NSMakeRange(1, value.length - 2)];
+        return value;
+    }
+    return nil;
+}
+
+static NSString *FDWWUpdatedEnvironment(NSString *contents, NSDictionary<NSString *, NSString *> *updates) {
+    NSMutableArray<NSString *> *lines = [NSMutableArray array];
+    for (NSString *line in [contents componentsSeparatedByCharactersInSet:NSCharacterSet.newlineCharacterSet]) {
+        NSRange equals = [line rangeOfString:@"="];
+        NSString *key = equals.location == NSNotFound ? @"" : [[line substringToIndex:equals.location] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if ([key hasPrefix:@"export "]) key = [[key substringFromIndex:7] stringByTrimmingCharactersInSet:NSCharacterSet.whitespaceCharacterSet];
+        if (![updates objectForKey:key]) [lines addObject:line];
+    }
+    while (lines.count > 0 && lines.lastObject.length == 0) [lines removeLastObject];
+    for (NSString *key in updates) [lines addObject:[NSString stringWithFormat:@"%@=%@", key, updates[key]]];
+    return [[lines componentsJoinedByString:@"\n"] stringByAppendingString:@"\n"];
+}
+
+static BOOL FDWWSafeEnvironmentValue(NSString *value, NSUInteger maxLength) {
+    return [value isKindOfClass:NSString.class] && value.length > 0 && value.length <= maxLength &&
+        [value rangeOfCharacterFromSet:NSCharacterSet.newlineCharacterSet].location == NSNotFound &&
+        [value rangeOfCharacterFromSet:NSCharacterSet.controlCharacterSet].location == NSNotFound;
+}
+
 // A delegate caps response bytes while they arrive and refuses every redirect,
 // including redirects to another loopback port. It never exposes transport errors
 // (which can contain the private service URL) to the renderer.
@@ -110,6 +153,169 @@ static NSDictionary *FDWWError(NSString *code, NSString *message) {
     return self;
 }
 - (void)applicationWillTerminate:(NSNotification *)notification { [self shutdown]; }
+
+- (NSURL *)evaluatorConfigurationDirectoryWithError:(NSString **)errorMessage {
+    NSFileManager *fm = NSFileManager.defaultManager;
+    NSError *error = nil;
+    NSURL *support = [fm URLForDirectory:NSApplicationSupportDirectory inDomain:NSUserDomainMask appropriateForURL:nil create:YES error:&error];
+    NSURL *directory = [support URLByAppendingPathComponent:@"FocusDesk/waterlooworks/config" isDirectory:YES];
+    if (!support || ![fm createDirectoryAtURL:directory withIntermediateDirectories:YES attributes:@{NSFilePosixPermissions: @0700} error:&error] ||
+        ![fm setAttributes:@{NSFilePosixPermissions: @0700} ofItemAtPath:directory.path error:&error]) {
+        if (errorMessage) *errorMessage = @"FocusDesk could not open its private evaluator storage.";
+        return nil;
+    }
+    return directory;
+}
+
+- (void)migrateLegacyEvaluatorConfigurationIntoDirectory:(NSURL *)directory {
+    NSURL *legacy = [[NSURL fileURLWithPath:NSHomeDirectory() isDirectory:YES]
+        URLByAppendingPathComponent:@"Development/WaterlooWorks/llm-pass/config" isDirectory:YES];
+    NSFileManager *fm = NSFileManager.defaultManager;
+    NSDictionary *legacyAttributes = [fm attributesOfItemAtPath:legacy.path error:nil];
+    if (![legacyAttributes[NSFileType] isEqualToString:NSFileTypeDirectory]) return;
+
+    // The old grader used profile.example.json as its fallback when a private
+    // profile.json did not exist. Preserve that behavior while making the
+    // packaged FocusDesk service self-contained for this existing installation.
+    for (NSString *name in FDWWEvaluatorFiles()) {
+        NSURL *destination = [directory URLByAppendingPathComponent:name];
+        if ([fm fileExistsAtPath:destination.path]) continue;
+        NSString *sourceName = [name isEqualToString:@"profile.json"] ? @"profile.json" : name;
+        NSURL *source = [legacy URLByAppendingPathComponent:sourceName];
+        if (![fm fileExistsAtPath:source.path] && [name isEqualToString:@"profile.json"])
+            source = [legacy URLByAppendingPathComponent:@"profile.example.json"];
+        NSDictionary *attributes = [fm attributesOfItemAtPath:source.path error:nil];
+        unsigned long long size = [attributes[NSFileSize] unsignedLongLongValue];
+        if (!attributes || size == 0 || size > 1024 * 1024) continue;
+        NSData *data = [NSData dataWithContentsOfURL:source options:0 error:nil];
+        if (data && [data writeToURL:destination options:NSDataWritingAtomic error:nil])
+            [fm setAttributes:@{NSFilePosixPermissions: @0600} ofItemAtPath:destination.path error:nil];
+    }
+
+    // Migrate only the known evaluator variables from the old ignored env
+    // file. Other legacy environment values never enter FocusDesk.
+    NSURL *legacyEnvironmentURL = [[legacy URLByDeletingLastPathComponent]
+        URLByAppendingPathComponent:@".env.local"];
+    NSURL *environmentURL = [directory URLByAppendingPathComponent:@".env.local"];
+    NSString *legacyEnvironment = [NSString stringWithContentsOfURL:legacyEnvironmentURL encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    NSString *currentEnvironment = [NSString stringWithContentsOfURL:environmentURL encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    NSMutableDictionary *updates = [NSMutableDictionary dictionary];
+    for (NSString *key in @[ @"DEEPSEEK_API_KEY", @"DEEPSEEK_BASE_URL", @"DEEPSEEK_MODEL" ]) {
+        if (FDWWSafeEnvironmentValue(FDWWEnvironmentValue(currentEnvironment, key), 4096)) continue;
+        NSString *value = FDWWEnvironmentValue(legacyEnvironment, key);
+        NSUInteger maxLength = [key isEqualToString:@"DEEPSEEK_API_KEY"] ? 4096 : ([key isEqualToString:@"DEEPSEEK_BASE_URL"] ? 2048 : 128);
+        if (FDWWSafeEnvironmentValue(value, maxLength)) updates[key] = value;
+    }
+    if (updates.count > 0) {
+        NSData *data = [FDWWUpdatedEnvironment(currentEnvironment, updates) dataUsingEncoding:NSUTF8StringEncoding];
+        if ([data writeToURL:environmentURL options:NSDataWritingAtomic error:nil])
+            [fm setAttributes:@{NSFilePosixPermissions: @0600} ofItemAtPath:environmentURL.path error:nil];
+    }
+}
+
+- (NSDictionary *)evaluatorConfigurationStatus {
+    NSString *directoryError = nil;
+    NSURL *directory = [self evaluatorConfigurationDirectoryWithError:&directoryError];
+    if (!directory) return FDWWError(@"WATERLOOWORKS_STORAGE_ERROR", directoryError);
+    [self migrateLegacyEvaluatorConfigurationIntoDirectory:directory];
+    NSString *environment = [NSString stringWithContentsOfURL:[directory URLByAppendingPathComponent:@".env.local"] encoding:NSUTF8StringEncoding error:nil] ?: @"";
+    NSMutableDictionary *files = [NSMutableDictionary dictionary];
+    BOOL allFilesPresent = YES;
+    for (NSString *name in FDWWEvaluatorFiles()) {
+        NSDictionary *attributes = [NSFileManager.defaultManager attributesOfItemAtPath:[directory URLByAppendingPathComponent:name].path error:nil];
+        unsigned long long fileSize = [attributes[NSFileSize] unsignedLongLongValue];
+        BOOL present = fileSize > 0 && fileSize <= 1024 * 1024;
+        files[name] = @(present);
+        allFilesPresent = allFilesPresent && present;
+    }
+    BOOL hasKey = FDWWSafeEnvironmentValue(FDWWEnvironmentValue(environment, @"DEEPSEEK_API_KEY"), 4096);
+    return @{ @"ok": @YES, @"data": @{ @"apiKeyConfigured": @(hasKey), @"files": files, @"complete": @(hasKey && allFilesPresent) } };
+}
+
+- (void)evaluatorConfigurationStatusWithCompletion:(FDWaterlooWorksCompletion)completion {
+    dispatch_async(self.queue, ^{
+        NSDictionary *response = [self evaluatorConfigurationStatus];
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(response); });
+    });
+}
+
+- (void)saveEvaluatorConfiguration:(NSDictionary *)payload completion:(FDWaterlooWorksCompletion)completion {
+    FDWaterlooWorksCompletion reply = ^(NSDictionary *response) {
+        dispatch_async(dispatch_get_main_queue(), ^{ completion(response); });
+    };
+    if (![payload isKindOfClass:NSDictionary.class]) {
+        reply(FDWWError(@"INVALID_REQUEST", @"Evaluator setup must be an object."));
+        return;
+    }
+    NSSet *allowed = [NSSet setWithArray:@[ @"apiKey", @"endpoint", @"model", @"files" ]];
+    for (id key in payload) if (![key isKindOfClass:NSString.class] || ![allowed containsObject:key]) {
+        reply(FDWWError(@"INVALID_REQUEST", @"Unsupported evaluator setup field."));
+        return;
+    }
+    NSString *apiKey = payload[@"apiKey"];
+    NSString *endpoint = payload[@"endpoint"];
+    NSString *model = payload[@"model"];
+    NSDictionary *submittedFiles = payload[@"files"];
+    if ((apiKey && !FDWWSafeEnvironmentValue(apiKey, 4096)) ||
+        (endpoint && !FDWWSafeEnvironmentValue(endpoint, 2048)) ||
+        (model && !FDWWSafeEnvironmentValue(model, 128)) ||
+        (submittedFiles && ![submittedFiles isKindOfClass:NSDictionary.class]) ||
+        (!apiKey && !endpoint && !model && !submittedFiles)) {
+        reply(FDWWError(@"INVALID_REQUEST", @"Evaluator setup contains an invalid value."));
+        return;
+    }
+    if (endpoint) {
+        NSURLComponents *components = [NSURLComponents componentsWithString:endpoint];
+        if (!components || ![components.scheme.lowercaseString isEqualToString:@"https"] || !components.host.length) {
+            reply(FDWWError(@"INVALID_REQUEST", @"The evaluator endpoint must be an HTTPS URL."));
+            return;
+        }
+    }
+    NSCharacterSet *validModelCharacters = [NSCharacterSet characterSetWithCharactersInString:@"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789._:-"];
+    if (model && [model rangeOfCharacterFromSet:validModelCharacters.invertedSet].location != NSNotFound) {
+        reply(FDWWError(@"INVALID_REQUEST", @"The evaluator model contains unsupported characters."));
+        return;
+    }
+    for (id name in submittedFiles) {
+        NSString *contents = submittedFiles[name];
+        if (![name isKindOfClass:NSString.class] || ![FDWWEvaluatorFiles() containsObject:name] ||
+            ![contents isKindOfClass:NSString.class] || contents.length == 0 || contents.length > 1024 * 1024) {
+            reply(FDWWError(@"INVALID_REQUEST", @"Evaluator files must be one of the five expected non-empty files."));
+            return;
+        }
+    }
+    dispatch_async(self.queue, ^{
+        NSString *directoryError = nil;
+        NSURL *directory = [self evaluatorConfigurationDirectoryWithError:&directoryError];
+        if (!directory) { reply(FDWWError(@"WATERLOOWORKS_STORAGE_ERROR", directoryError)); return; }
+        [self migrateLegacyEvaluatorConfigurationIntoDirectory:directory];
+        NSError *writeError = nil;
+        if (apiKey || endpoint || model) {
+            NSURL *environmentURL = [directory URLByAppendingPathComponent:@".env.local"];
+            NSString *existing = [NSString stringWithContentsOfURL:environmentURL encoding:NSUTF8StringEncoding error:nil] ?: @"";
+            NSMutableDictionary *updates = [NSMutableDictionary dictionary];
+            if (apiKey) updates[@"DEEPSEEK_API_KEY"] = apiKey;
+            if (endpoint) updates[@"DEEPSEEK_BASE_URL"] = endpoint;
+            if (model) updates[@"DEEPSEEK_MODEL"] = model;
+            NSData *environmentData = [FDWWUpdatedEnvironment(existing, updates) dataUsingEncoding:NSUTF8StringEncoding];
+            if (![environmentData writeToURL:environmentURL options:NSDataWritingAtomic error:&writeError] ||
+                ![NSFileManager.defaultManager setAttributes:@{NSFilePosixPermissions: @0600} ofItemAtPath:environmentURL.path error:&writeError]) {
+                reply(FDWWError(@"WATERLOOWORKS_STORAGE_ERROR", @"FocusDesk could not save evaluator settings."));
+                return;
+            }
+        }
+        for (NSString *name in submittedFiles) {
+            NSURL *fileURL = [directory URLByAppendingPathComponent:name];
+            NSData *data = [submittedFiles[name] dataUsingEncoding:NSUTF8StringEncoding];
+            if (!data || ![data writeToURL:fileURL options:NSDataWritingAtomic error:&writeError] ||
+                ![NSFileManager.defaultManager setAttributes:@{NSFilePosixPermissions: @0600} ofItemAtPath:fileURL.path error:&writeError]) {
+                reply(FDWWError(@"WATERLOOWORKS_STORAGE_ERROR", @"FocusDesk could not save evaluator configuration files."));
+                return;
+            }
+        }
+        reply([self evaluatorConfigurationStatus]);
+    });
+}
 
 // Decode only for matching; send the original, validated relative path. This
 // rejects URL authorities, fragments, dot segments, escaped separators and
