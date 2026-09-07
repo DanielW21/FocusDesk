@@ -1,5 +1,9 @@
 import { createAppRegistries } from "./app/bootstrap";
-import { FocusDeskDatabase } from "./app/app-database";
+import {
+  FocusDeskDatabase,
+  FocusDeskDatabaseDocumentSchema,
+  type FocusDeskDatabaseDocument,
+} from "./app/app-database";
 import {
   WidgetDimensionSchema,
   type WidgetDimension,
@@ -8,6 +12,7 @@ import {
 } from "./contracts/widgets";
 import { createDefaultWidgetLayout } from "./features/workspace/default-layout";
 import { createFocusDeskTasksClient } from "./features/workspace/tasks-client";
+import { createNativeWorkspaceClient } from "./features/workspace/native-workspace-client";
 import type {
   CalendarEvent,
   Note,
@@ -60,11 +65,15 @@ import {
   type GoogleCalendarSummary,
 } from "./features/workspace/google-calendar-client";
 import { reconcileGoogleCalendarSync } from "./features/workspace/calendar-sync";
+import { withWaterlooWorksWidget } from "./app/feature-layout-upgrades";
+import { createWaterlooWorksController } from "./features/waterlooworks/controller";
+import "./features/waterlooworks/waterlooworks.css";
 
 type View =
   | "today"
   | "tasks"
   | "taskmanager"
+  | "waterlooworks"
   | "calendar"
   | "notes"
   | "links"
@@ -84,7 +93,30 @@ interface AppState {
 
 const registries = createAppRegistries();
 const widgetLayoutStore = new WidgetLayoutStore(registries.widgets);
-const appDatabase = new FocusDeskDatabase(localStorage);
+const nativeWorkspaceClient = createNativeWorkspaceClient();
+let nativeWorkspaceReady = false;
+let nativeWorkspaceSaveQueue = Promise.resolve();
+let nativeWorkspaceMessage = "";
+
+function queueNativeWorkspaceSave(document: FocusDeskDatabaseDocument): void {
+  if (!nativeWorkspaceReady || !isNativeBridgeAvailable()) return;
+  nativeWorkspaceSaveQueue = nativeWorkspaceSaveQueue
+    .then(() => nativeWorkspaceClient.save(document))
+    .then(() => {
+      nativeWorkspaceMessage = "";
+    })
+    .catch((error: unknown) => {
+      nativeWorkspaceMessage = `Database save failed; changes remain in the local mirror. ${error instanceof Error ? error.message : "Try again after restarting FocusDesk."}`;
+      render();
+    });
+}
+
+const appDatabase = new FocusDeskDatabase(
+  localStorage,
+  undefined,
+  undefined,
+  queueNativeWorkspaceSave,
+);
 const focusDeskTasksClient = createFocusDeskTasksClient();
 const googleCalendarClient = createGoogleCalendarClient();
 const now = new Date();
@@ -140,6 +172,13 @@ const starterState: AppState = {
 
 const state = loadState();
 appDatabase.ensure(state);
+const waterlooWorksController = createWaterlooWorksController({
+  getConfig: () => state.settings.waterlooWorks,
+  onConfigChange: (config) => {
+    state.settings.waterlooWorks = config;
+    appDatabase.save(state);
+  },
+});
 let taskManagerMode: TaskManagerMode = state.settings.taskManagerMode;
 let taskManagerProgressView: TaskManagerProgressView =
   state.settings.taskManagerProgressView;
@@ -153,12 +192,46 @@ function loadState(): AppState {
     events: saved.events,
     notes: saved.notes,
     links: saved.links,
-    widgetLayout: widgetLayoutStore.load(
-      saved.widgetLayout,
-      createDefaultWidgetLayout(),
+    widgetLayout: withWaterlooWorksWidget(
+      widgetLayoutStore.load(saved.widgetLayout, createDefaultWidgetLayout()),
     ),
     settings: parseFocusDeskSettings(saved.settings),
   };
+}
+
+async function initializeNativeWorkspace(): Promise<void> {
+  if (!isNativeBridgeAvailable()) return;
+
+  try {
+    const document = await nativeWorkspaceClient.load();
+    const parsed = FocusDeskDatabaseDocumentSchema.safeParse(document);
+    if (document !== undefined && !parsed.success) {
+      throw new Error(
+        "The saved workspace is incompatible or unreadable; it has not been overwritten.",
+      );
+    }
+    if (parsed.success) {
+      state.events = [...parsed.data.tables.events];
+      state.notes = [...parsed.data.tables.notes];
+      state.links = [...parsed.data.tables.links];
+      state.widgetLayout = withWaterlooWorksWidget(
+        widgetLayoutStore.load(
+          parsed.data.dashboard.widgetLayout,
+          createDefaultWidgetLayout(),
+        ),
+      );
+      state.settings = parseFocusDeskSettings(parsed.data.dashboard.settings);
+      taskManagerMode = state.settings.taskManagerMode;
+      taskManagerProgressView = state.settings.taskManagerProgressView;
+      taskManagerTodoDays = state.settings.taskManagerTodoDays;
+      applySettings();
+    }
+
+    nativeWorkspaceReady = true;
+    appDatabase.save(state);
+  } catch (error: unknown) {
+    nativeWorkspaceMessage = `Using the local workspace mirror. ${error instanceof Error ? error.message : "The database could not be loaded."}`;
+  }
 }
 
 function localDate(date: Date): string {
@@ -638,6 +711,7 @@ function render(): void {
     today: "Today",
     tasks: "All tasks",
     taskmanager: "TaskManager",
+    waterlooworks: "WaterlooWorks",
     calendar: "Calendar",
     notes: "Scratch notes",
     links: "Quick links",
@@ -658,13 +732,27 @@ function render(): void {
     today: todayView,
     tasks: tasksView,
     taskmanager: taskManagerView,
+    waterlooworks: waterlooWorksView,
     calendar: calendarView,
     notes: notesView,
     links: linksView,
     settings: settingsView,
   };
-  root.innerHTML = views[view]();
+  root.innerHTML = `${nativeWorkspaceMessage ? `<p role="alert" class="empty">${escapeHtml(nativeWorkspaceMessage)}</p>` : ""}${views[view]()}`;
   bindViewActions();
+  document
+    .querySelectorAll<HTMLElement>('[data-widget-id="waterlooworks-jobs"]')
+    .forEach((widget) =>
+      waterlooWorksController.bindWidget(
+        widget,
+        () => {
+          view = "waterlooworks";
+          render();
+        },
+        render,
+      ),
+    );
+  if (view === "waterlooworks") waterlooWorksController.bind(root, render);
   updateHeaderActions();
   updateClocks();
   clockInterval = window.setInterval(updateClocks, 1000);
@@ -710,6 +798,10 @@ function todayView(): string {
   </div>`;
 }
 
+function waterlooWorksView(): string {
+  return `<div class="view-wrap">${waterlooWorksController.render()}</div>`;
+}
+
 function widgetStyleKey(widgetId: string): string {
   const segments = widgetId.split(".");
   return segments[segments.length - 1] ?? widgetId;
@@ -724,6 +816,7 @@ function widgetData() {
     selectedDate,
     focusDurationMinutes: state.settings.focusDurationMinutes,
     taskManager: taskManagerRuntime,
+    waterlooWorks: waterlooWorksController.widgetData(),
   };
 }
 
@@ -774,10 +867,13 @@ function widgetCard(widget: WidgetInstance): string {
     )
     .join("");
   const surface =
-    styleKey === "links"
+    styleKey === "links" || widget.widgetId === "waterlooworks.jobs"
       ? `<div class="widget-surface" data-action="open-widget" data-widget-id="${widget.id}" role="button" tabindex="0" aria-label="Open ${meta.title}">`
       : `<button class="widget-surface" data-action="open-widget" data-widget-id="${widget.id}" aria-label="Open ${meta.title}">`;
-  const surfaceEnd = styleKey === "links" ? "</div>" : "</button>";
+  const surfaceEnd =
+    styleKey === "links" || widget.widgetId === "waterlooworks.jobs"
+      ? "</div>"
+      : "</button>";
   return `<article class="desk-widget widget-${styleKey} dimension-${widget.dimension} ${widgetEditMode ? "editing" : ""}" data-widget-id="${widget.id}" data-widget-columns="${columns}" data-widget-rows="${rows}" style="--widget-columns:${columns};--widget-rows:${rows};" draggable="${widgetEditMode}">
     ${widgetEditMode ? `<div class="widget-edit-controls"><label class="sr-only" for="widget-dimension-${widget.id}">Choose widget dimensions</label><select id="widget-dimension-${widget.id}" class="widget-dimension-select" data-action="set-widget-dimension" data-widget-id="${widget.id}" title="Choose dimensions">${dimensionOptions}</select><button data-action="hide-widget" data-widget-id="${widget.id}" title="Hide widget">−</button></div><div class="drag-handle">••••••</div>` : ""}
     ${surface}
@@ -811,6 +907,11 @@ function openWidget(widgetId: string): void {
     (item) => item.id === widgetId,
   );
   if (!widget) return;
+  if (widget.widgetId === "waterlooworks.jobs") {
+    view = "waterlooworks";
+    render();
+    return;
+  }
   const meta = registries.widgets.require(widget.widgetId).manifest;
   const styleKey = widgetStyleKey(widget.widgetId);
   const tasks = state.tasks.filter((task) => task.date === selectedDate);
@@ -946,7 +1047,7 @@ function toggleWidgetFromSettings(widgetId: string): void {
 
 function restoreDefaultDashboard(): void {
   if (!window.confirm("Restore the default dashboard layout?")) return;
-  state.widgetLayout = createDefaultWidgetLayout();
+  state.widgetLayout = withWaterlooWorksWidget(createDefaultWidgetLayout());
   persist(true);
 }
 
@@ -1851,6 +1952,7 @@ function bindViewActions(): void {
     .forEach(
       (surface) =>
         (surface.onkeydown = (event) => {
+          if (event.target !== surface) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             surface.click();
@@ -1869,6 +1971,7 @@ function bindViewActions(): void {
   document.querySelectorAll<HTMLElement>("[data-action]:not(select)").forEach(
     (control) =>
       (control.onclick = (event) => {
+        if ((event.target as Element).closest("[data-ww-widget]")) return;
         const action = control.dataset.action;
         if (action === "taskmanager-refresh") {
           refreshTaskManagerView();
@@ -2255,8 +2358,10 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-void initializeFocusDeskTasks()
+void initializeNativeWorkspace()
+  .then(() => initializeFocusDeskTasks())
   .then(() => refreshTaskManagerRuntime())
+  .then(() => waterlooWorksController.initialize())
   .then(() => syncGoogleCalendarOnStartup())
   .then(() => render());
 render();

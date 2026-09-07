@@ -58,6 +58,25 @@ Use **Settings** in the sidebar to change the theme, accent color, interface den
 
 Quick Links use a compact three-column layout on desktop. Each link can have its own colour and an uploaded icon image. Existing image URL/path assets remain compatible. The dashboard Quick Links widget makes each icon directly clickable.
 
+## WaterlooWorks integration
+
+The first WaterlooWorks migration slice lives in `tools/waterlooworks`. Its
+jobs, evaluations, and ratings tables are part of the centralized
+`focusdesk.sqlite3` database alongside FocusDesk tasks and TaskManager data.
+Import the existing WaterlooWorks JSON data with:
+
+```sh
+npm run migrate --prefix tools/waterlooworks -- \
+  --source=/Users/danielwu/Development/WaterlooWorks \
+  --database=/Users/danielwu/Library/Application\\ Support/FocusDesk/focusdesk.sqlite3
+```
+
+To merge the previously-created separate WaterlooWorks database, add
+`--from-database=/Users/danielwu/Library/Application\\ Support/FocusDesk/waterlooworks/waterlooworks.sqlite3`.
+The old file is retained as a backup. The importer is idempotent and never modifies the source files. The scraper,
+LLM grader, native process supervisor, and Jobs UI will be migrated in later
+slices; the service reports those capabilities as unavailable until then.
+
 ## Checks
 
 Run the same checks used by GitHub Actions before opening a pull request:

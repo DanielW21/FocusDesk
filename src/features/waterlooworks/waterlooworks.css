@@ -1,0 +1,90 @@
+.ww-page { color: var(--ink, #1e2723); font-family: 'DM Sans', sans-serif; max-width: 1320px; margin: auto; }
+.ww-page *, .ww-widget * { box-sizing: border-box; }
+.ww-page h1 { margin: 5px 0; font-size: 32px; letter-spacing: -1px; }
+.ww-page h2 { font-size: 22px; margin: 16px 0; }
+.ww-page h3 { font-size: 16px; margin: 18px 0 10px; }
+.ww-page h4 { font-size: 13px; margin: 18px 0 8px; }
+.ww-page p { line-height: 1.6; }
+.ww-page a { color: #976044; overflow-wrap: anywhere; }
+.ww-page button, .ww-widget button { border: 1px solid var(--line, #e7eae6); background: white; color: inherit; border-radius: 8px; padding: 9px 12px; font: 500 12px 'DM Sans', sans-serif; cursor: pointer; }
+.ww-page button:hover, .ww-widget button:hover { border-color: var(--accent, #d96f4e); }
+.ww-page button:disabled, .ww-widget button:disabled { opacity: .5; cursor: default; }
+.ww-page :focus-visible, .ww-widget:focus-visible, .ww-widget :focus-visible { outline: 2px solid var(--accent, #d96f4e); outline-offset: 3px; }
+.ww-header, .ww-toolbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; margin-bottom: 14px; }
+.ww-eyebrow { color: var(--accent, #d96f4e); text-transform: uppercase; letter-spacing: 1px; font: 11px 'DM Mono', monospace; }
+.ww-muted, .ww-note { color: var(--muted, #76817a); }
+.ww-note { font-size: 11px; line-height: 1.5; }
+.ww-page h2 .ww-muted { font-size: 12px; font-weight: 400; margin-left: 10px; }
+.ww-tabs { display: flex; gap: 6px; border-bottom: 1px solid var(--line, #e7eae6); margin-bottom: 24px; padding-bottom: 12px; flex-wrap: wrap; }
+.ww-tabs button[aria-current="page"], .ww-ranks button[aria-pressed="true"] { background: var(--accent-soft, #fff0e9); border-color: var(--accent, #d96f4e); color: #9e5138; }
+.ww-panel { border: 1px solid var(--line, #e7eae6); background: white; border-radius: 12px; padding: 20px; min-width: 0; }
+.ww-review-layout { display: grid; grid-template-columns: minmax(0, 2fr) minmax(220px, 1fr); align-items: start; gap: 18px; }
+.ww-company { position: sticky; top: 16px; font-size: 13px; }
+.ww-company h3 { margin-top: 8px; font-size: 20px; }
+.ww-links, .ww-pills, .ww-toggles { display: flex; flex-wrap: wrap; gap: 8px; }
+.ww-toggles { font-size: 12px; }
+.ww-pills span { background: var(--sidebar, #f2f5f1); border-radius: 20px; padding: 6px 9px; font-size: 11px; }
+.ww-links { margin-top: 20px; }
+.ww-ai-score { display: flex; align-items: center; gap: 16px; padding: 18px 0; }
+.ww-ai-score strong { font-size: 32px; color: var(--sage, #71927b); }
+.ww-ai-score small { font-size: 12px; font-weight: 400; }
+.ww-ai-score > span { font-size: 13px; }
+.ww-metrics { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+.ww-metrics b { font-size: 12px; overflow-wrap: anywhere; }
+.ww-metrics small, .ww-job-row small { display: block; color: var(--muted, #76817a); font-size: 10px; margin-top: 4px; }
+.ww-ranks { display: flex; gap: 7px; margin: 12px 0; flex-wrap: wrap; }
+.ww-ranks button { flex: 1; min-width: 52px; }
+.ww-ranks b, .ww-ranks span { display: block; }
+.ww-ranks b { font-size: 18px; margin-bottom: 5px; }
+.ww-ranks span { font-size: 10px; }
+.ww-page details { margin: 16px 0; }
+.ww-page summary { cursor: pointer; color: #687a6e; font-size: 12px; padding: 8px 0; }
+.ww-descriptions { overflow-wrap: anywhere; }
+.ww-description { font-size: 13px; line-height: 1.65; white-space: pre-wrap; max-height: 185px; overflow: hidden; }
+.ww-expanded .ww-description { max-height: none; overflow: auto; }
+.ww-description table { max-width: 100%; border-collapse: collapse; }
+.ww-description td, .ww-description th { border: 1px solid var(--line, #e7eae6); padding: 6px; }
+.ww-rich-fields { margin: 8px 0; font-size: 12px; overflow-wrap: anywhere; }
+.ww-rich-fields dt { font-weight: 600; margin-top: 10px; }
+.ww-rich-fields dd { margin: 5px 0 8px 12px; }
+.ww-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; margin: 12px 0; }
+.ww-page label { color: var(--muted, #76817a); font-size: 11px; }
+.ww-page input:not([type="checkbox"]), .ww-page select { display: block; width: 100%; border: 1px solid var(--line, #e7eae6); border-radius: 7px; background: white; color: var(--ink, #1e2723); padding: 9px; margin-top: 5px; font: 12px 'DM Sans', sans-serif; min-width: 0; }
+.ww-page input[type="checkbox"] { accent-color: var(--accent, #d96f4e); vertical-align: middle; }
+.ww-list { display: grid; gap: 7px; }
+.ww-page .ww-job-row { display: grid; width: 100%; grid-template-columns: minmax(160px, 2.2fr) .65fr 1fr .75fr 1fr; text-align: left; align-items: center; gap: 12px; padding: 14px; }
+.ww-row-title { min-width: 0; overflow-wrap: anywhere; }
+.ww-job-row:hover { background: var(--paper, #fbfcfa); }
+.ww-pagination { display: flex; justify-content: center; align-items: center; gap: 14px; margin: 22px 0; font-size: 12px; }
+.ww-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(100px, 1fr)); gap: 12px; margin: 18px 0; }
+.ww-stat { border: 1px solid var(--line, #e7eae6); border-radius: 10px; padding: 16px; background: var(--paper, #fbfcfa); }
+.ww-stat strong { display: block; font-size: 28px; font-weight: 500; }
+.ww-stat span { display: block; font-size: 11px; color: var(--muted, #76817a); margin-top: 6px; }
+.ww-columns { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.ww-bar { display: grid; grid-template-columns: 120px 1fr 28px; gap: 8px; align-items: center; margin: 12px 0; font-size: 11px; }
+.ww-bar meter { width: 100%; height: 12px; }
+.ww-bar meter::-webkit-meter-optimum-value { background: var(--sage, #71927b); }
+.ww-alert { background: #fff4e7; color: #875a33; border: 1px solid #ead6bd; border-radius: 8px; padding: 12px; margin: 14px 0; font-size: 12px; overflow-wrap: anywhere; }
+.ww-empty { padding: 40px 20px; text-align: center; color: var(--muted, #76817a); border: 1px dashed var(--line, #e7eae6); border-radius: 12px; }
+.ww-run { margin-bottom: 12px; }
+.ww-run small { color: var(--muted, #76817a); overflow-wrap: anywhere; }
+.ww-shortlist .ww-job-row { margin: 7px 0; }
+.ww-page-footer { display: flex; flex-wrap: wrap; gap: 16px; border-top: 1px solid var(--line, #e7eae6); padding-top: 16px; margin-top: 30px; align-items: center; }
+.ww-drawer-backdrop { position: fixed; inset: 0; z-index: 30; background: #17211b55; }
+.ww-drawer { margin-left: auto; width: min(760px, 95vw); height: 100%; overflow-y: auto; background: var(--paper, #fbfcfa); padding: 24px; box-shadow: -15px 0 50px #17211b25; }
+.ww-drawer .ww-panel { margin-top: 15px; }
+.ww-drawer .ww-company { position: static; }
+.ww-widget { display: flex; flex-direction: column; gap: 10px; height: 100%; min-height: 0; cursor: pointer; overflow: auto; }
+.ww-widget-count { display: flex; align-items: baseline; gap: 12px; }
+.ww-widget-count strong { font-size: 42px; font-weight: 500; color: var(--sage, #71927b); line-height: 1.1; }
+.ww-widget-count span { font-size: 12px; color: var(--muted, #76817a); }
+.ww-widget button { background: var(--accent-soft, #fff0e9); color: #9e5138; align-self: flex-start; white-space: nowrap; }
+.ww-widget p { margin: 0; }
+.ww-widget-compact { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 8px; }
+.ww-widget-compact .ww-widget-count { gap: 7px; }
+.ww-widget-compact .ww-widget-count strong { font-size: 30px; }
+.ww-widget-compact .ww-widget-count span { font-size: 11px; }
+.ww-widget-compact button { align-self: center; padding: 7px 8px; font-size: 11px; }
+.ww-widget-message { font-size: 11px; color: #875a33; grid-column: 1 / -1; overflow-wrap: anywhere; }
+@media (max-width: 1000px) { .ww-review-layout { grid-template-columns: 1fr; } .ww-company { position: static; } .ww-columns { grid-template-columns: 1fr; } }
+@media (max-width: 650px) { .ww-filters { grid-template-columns: 1fr 1fr; } .ww-page .ww-job-row { grid-template-columns: 1fr 70px; } .ww-job-row > span:nth-child(n+3) { font-size: 11px; } .ww-header { align-items: flex-start; } .ww-widget-compact { grid-template-columns: 1fr; } .ww-drawer { padding: 12px; } }

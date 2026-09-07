@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { PageConfigSchema } from "./features/waterlooworks/model";
 
 export const FocusDeskThemeSchema = z.enum(["light", "dark"]);
 export const FocusDeskDensitySchema = z.enum([
@@ -28,6 +29,7 @@ export const FocusDeskSettingsSchema = z.object({
   googleCalendarAutoSync: z.boolean(),
   googleCalendarSelectionInitialized: z.boolean(),
   googleCalendarSelectionVersion: z.number().int().min(0).max(10),
+  waterlooWorks: PageConfigSchema,
 });
 
 export type FocusDeskSettings = z.infer<typeof FocusDeskSettingsSchema>;
@@ -44,6 +46,7 @@ export const DEFAULT_FOCUSDESK_SETTINGS: FocusDeskSettings = {
   googleCalendarAutoSync: true,
   googleCalendarSelectionInitialized: false,
   googleCalendarSelectionVersion: 0,
+  waterlooWorks: PageConfigSchema.parse({}),
 };
 
 export function parseFocusDeskSettings(value: unknown): FocusDeskSettings {

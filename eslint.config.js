@@ -3,7 +3,13 @@ import tseslint from "typescript-eslint";
 
 export default tseslint.config(
   {
-    ignores: ["dist/**", "native/**", "node_modules/**", "release/**"],
+    ignores: [
+      "dist/**",
+      "native/**",
+      "node_modules/**",
+      "release/**",
+      "tools/waterlooworks/**",
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommended,

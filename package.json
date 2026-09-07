@@ -13,6 +13,8 @@
     "preview": "vite preview",
     "package:mac": "./build-native.sh",
     "test": "vitest run",
+    "test:waterlooworks": "npm test --prefix tools/waterlooworks",
+    "test:waterlooworks:ui": "node native/waterlooworks-ui-smoke.mjs",
     "tsc:check": "tsc --noEmit"
   },
   "devDependencies": {

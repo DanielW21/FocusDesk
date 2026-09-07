@@ -4,6 +4,7 @@ import {
   FocusDeskDatabase,
   FOCUSDESK_DATABASE_KEY,
   LEGACY_FOCUSDESK_STORAGE_KEY,
+  type FocusDeskDatabaseDocument,
   type FocusDeskDatabaseStorage,
 } from "./app-database";
 
@@ -53,6 +54,31 @@ describe("FocusDeskDatabase", () => {
       schemaVersion: 1,
       revision: 1,
       tables: { tasks: [{ title: "Plan the day" }] },
+    });
+  });
+
+  it("notifies the native database mirror when saving", () => {
+    const storage = createStorage();
+    let savedDocument: FocusDeskDatabaseDocument | undefined;
+    const database = new FocusDeskDatabase(
+      storage,
+      undefined,
+      undefined,
+      (document) => {
+        savedDocument = document;
+      },
+    );
+
+    database.save(fallback);
+
+    expect(savedDocument).toBeDefined();
+    if (!savedDocument) throw new Error("The save listener was not called.");
+    expect(savedDocument.schemaVersion).toBe(1);
+    expect(savedDocument.tables).toEqual({
+      tasks: fallback.tasks,
+      events: fallback.events,
+      notes: fallback.notes,
+      links: fallback.links,
     });
   });
 

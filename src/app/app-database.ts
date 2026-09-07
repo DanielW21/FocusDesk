@@ -58,6 +58,10 @@ export interface FocusDeskDatabaseStorage {
   setItem(key: string, value: string): void;
 }
 
+export type FocusDeskDatabaseSaveListener = (
+  document: FocusDeskDatabaseDocument,
+) => void;
+
 function parseStoredValue(storage: FocusDeskDatabaseStorage, key: string) {
   const value = storage.getItem(key);
   if (!value) return undefined;
@@ -107,6 +111,7 @@ export class FocusDeskDatabase {
     private readonly storage: FocusDeskDatabaseStorage,
     private readonly key = FOCUSDESK_DATABASE_KEY,
     private readonly legacyKey = LEGACY_FOCUSDESK_STORAGE_KEY,
+    private readonly onSave?: FocusDeskDatabaseSaveListener,
   ) {}
 
   load(fallback: FocusDeskDatabaseState): FocusDeskDatabaseState {
@@ -140,6 +145,7 @@ export class FocusDeskDatabase {
     this.storage.setItem(this.key, JSON.stringify(document));
     this.#revision = document.revision;
     this.#hasCurrentDocument = true;
+    this.onSave?.(document);
     return document;
   }
 

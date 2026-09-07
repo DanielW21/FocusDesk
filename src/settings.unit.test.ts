@@ -15,4 +15,13 @@ describe("FocusDesk settings", () => {
       DEFAULT_FOCUSDESK_SETTINGS,
     );
   });
+
+  it("defaults WaterlooWorks to Co-op and persists optional direct coverage", () => {
+    expect(parseFocusDeskSettings({}).waterlooWorks.scraperBoard).toBe("coop");
+    expect(
+      parseFocusDeskSettings({
+        waterlooWorks: { scraperBoard: "direct", autoNext: false },
+      }).waterlooWorks,
+    ).toEqual({ scraperBoard: "direct", autoNext: false, keyboard: true });
+  });
 });

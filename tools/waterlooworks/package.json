@@ -1,0 +1,24 @@
+{
+  "name": "@focusdesk/waterlooworks",
+  "private": true,
+  "version": "1.0.0",
+  "type": "commonjs",
+  "engines": {
+    "node": ">=22.5"
+  },
+  "scripts": {
+    "build": "node build.js",
+    "scrape": "node --experimental-sqlite dist/cli.js scrape",
+    "grade": "node --experimental-sqlite dist/cli.js grade",
+    "test": "node --experimental-sqlite --test test/*.test.js",
+    "migrate": "node --experimental-sqlite dist/migrate-legacy.js",
+    "service": "node --experimental-sqlite dist/server.js"
+  },
+  "dependencies": {
+    "@internwave/scrapers-api": "1.0.1",
+    "he": "1.2.0",
+    "puppeteer-core": "23.11.1",
+    "zod": "4.5.4"
+  },
+  "devDependencies": { "esbuild": "0.27.7" }
+}
