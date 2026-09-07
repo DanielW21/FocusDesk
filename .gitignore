@@ -3,6 +3,7 @@ dist/
 release/
 .local/
 .agents/
+docs/
 .DS_Store
 *.log
 *.sqlite
