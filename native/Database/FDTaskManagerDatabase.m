@@ -96,6 +96,7 @@ static NSString *const FDTaskManagerAPI = @"v1";
         self.initializationError = [self sqliteMessage];
         return;
     }
+    sqlite3_busy_timeout(self.database, 5000);
     const char *schema =
         "PRAGMA journal_mode = WAL;"
         "PRAGMA foreign_keys = ON;"

@@ -1,5 +1,6 @@
 import { workspaceFeature } from "../features/workspace/feature";
 import { taskManagerFeature } from "../features/tasks/feature";
+import { waterlooWorksFeature } from "../features/waterlooworks/feature";
 import { createTaskManagerActions } from "../features/tasks/actions";
 import { createTaskManagerClient } from "../features/tasks/tasks-client";
 import { ActionRegistry } from "../actions/action-registry";
@@ -17,6 +18,7 @@ export function createAppRegistries(): AppRegistries {
   const actions = new ActionRegistry();
   features.register(workspaceFeature);
   features.register(taskManagerFeature);
+  features.register(waterlooWorksFeature);
   for (const action of createTaskManagerActions(createTaskManagerClient())) {
     actions.register(action);
   }

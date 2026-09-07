@@ -1,5 +1,9 @@
 import { createAppRegistries } from "./app/bootstrap";
-import { FocusDeskDatabase } from "./app/app-database";
+import {
+  FocusDeskDatabase,
+  FocusDeskDatabaseDocumentSchema,
+  type FocusDeskDatabaseDocument,
+} from "./app/app-database";
 import {
   WidgetDimensionSchema,
   type WidgetDimension,
@@ -8,6 +12,7 @@ import {
 } from "./contracts/widgets";
 import { createDefaultWidgetLayout } from "./features/workspace/default-layout";
 import { createFocusDeskTasksClient } from "./features/workspace/tasks-client";
+import { createNativeWorkspaceClient } from "./features/workspace/native-workspace-client";
 import type {
   CalendarEvent,
   Note,
@@ -60,11 +65,21 @@ import {
   type GoogleCalendarSummary,
 } from "./features/workspace/google-calendar-client";
 import { reconcileGoogleCalendarSync } from "./features/workspace/calendar-sync";
+import { withWaterlooWorksWidget } from "./app/feature-layout-upgrades";
+import { createWaterlooWorksController } from "./features/waterlooworks/controller";
+import {
+  createWaterlooWorksEvaluatorConfigClient,
+  evaluatorConfigFileNames,
+  type WaterlooWorksEvaluatorConfigUpdate,
+  type WaterlooWorksEvaluatorStatus,
+} from "./features/waterlooworks/evaluator-config-client";
+import "./features/waterlooworks/waterlooworks.css";
 
 type View =
   | "today"
   | "tasks"
   | "taskmanager"
+  | "waterlooworks"
   | "calendar"
   | "notes"
   | "links"
@@ -84,7 +99,30 @@ interface AppState {
 
 const registries = createAppRegistries();
 const widgetLayoutStore = new WidgetLayoutStore(registries.widgets);
-const appDatabase = new FocusDeskDatabase(localStorage);
+const nativeWorkspaceClient = createNativeWorkspaceClient();
+let nativeWorkspaceReady = false;
+let nativeWorkspaceSaveQueue = Promise.resolve();
+let nativeWorkspaceMessage = "";
+
+function queueNativeWorkspaceSave(document: FocusDeskDatabaseDocument): void {
+  if (!nativeWorkspaceReady || !isNativeBridgeAvailable()) return;
+  nativeWorkspaceSaveQueue = nativeWorkspaceSaveQueue
+    .then(() => nativeWorkspaceClient.save(document))
+    .then(() => {
+      nativeWorkspaceMessage = "";
+    })
+    .catch((error: unknown) => {
+      nativeWorkspaceMessage = `Database save failed; changes remain in the local mirror. ${error instanceof Error ? error.message : "Try again after restarting FocusDesk."}`;
+      render();
+    });
+}
+
+const appDatabase = new FocusDeskDatabase(
+  localStorage,
+  undefined,
+  undefined,
+  queueNativeWorkspaceSave,
+);
 const focusDeskTasksClient = createFocusDeskTasksClient();
 const googleCalendarClient = createGoogleCalendarClient();
 const now = new Date();
@@ -140,6 +178,18 @@ const starterState: AppState = {
 
 const state = loadState();
 appDatabase.ensure(state);
+const waterlooWorksController = createWaterlooWorksController({
+  getConfig: () => state.settings.waterlooWorks,
+  onConfigChange: (config) => {
+    state.settings.waterlooWorks = config;
+    appDatabase.save(state);
+  },
+});
+const waterlooWorksEvaluatorConfigClient =
+  createWaterlooWorksEvaluatorConfigClient();
+let waterlooWorksEvaluatorStatus: WaterlooWorksEvaluatorStatus | undefined;
+let waterlooWorksEvaluatorMessage = "";
+let waterlooWorksEvaluatorSaving = false;
 let taskManagerMode: TaskManagerMode = state.settings.taskManagerMode;
 let taskManagerProgressView: TaskManagerProgressView =
   state.settings.taskManagerProgressView;
@@ -153,12 +203,133 @@ function loadState(): AppState {
     events: saved.events,
     notes: saved.notes,
     links: saved.links,
-    widgetLayout: widgetLayoutStore.load(
-      saved.widgetLayout,
-      createDefaultWidgetLayout(),
+    widgetLayout: withWaterlooWorksWidget(
+      widgetLayoutStore.load(saved.widgetLayout, createDefaultWidgetLayout()),
     ),
     settings: parseFocusDeskSettings(saved.settings),
   };
+}
+
+async function initializeNativeWorkspace(): Promise<void> {
+  if (!isNativeBridgeAvailable()) return;
+
+  try {
+    const document = await nativeWorkspaceClient.load();
+    const parsed = FocusDeskDatabaseDocumentSchema.safeParse(document);
+    if (document !== undefined && !parsed.success) {
+      throw new Error(
+        "The saved workspace is incompatible or unreadable; it has not been overwritten.",
+      );
+    }
+    if (parsed.success) {
+      state.events = [...parsed.data.tables.events];
+      state.notes = [...parsed.data.tables.notes];
+      state.links = [...parsed.data.tables.links];
+      state.widgetLayout = withWaterlooWorksWidget(
+        widgetLayoutStore.load(
+          parsed.data.dashboard.widgetLayout,
+          createDefaultWidgetLayout(),
+        ),
+      );
+      state.settings = parseFocusDeskSettings(parsed.data.dashboard.settings);
+      taskManagerMode = state.settings.taskManagerMode;
+      taskManagerProgressView = state.settings.taskManagerProgressView;
+      taskManagerTodoDays = state.settings.taskManagerTodoDays;
+      applySettings();
+    }
+
+    nativeWorkspaceReady = true;
+    appDatabase.save(state);
+  } catch (error: unknown) {
+    nativeWorkspaceMessage = `Using the local workspace mirror. ${error instanceof Error ? error.message : "The database could not be loaded."}`;
+  }
+}
+
+async function refreshWaterlooWorksEvaluatorConfig(): Promise<void> {
+  if (!isNativeBridgeAvailable()) return;
+  try {
+    waterlooWorksEvaluatorStatus =
+      await waterlooWorksEvaluatorConfigClient.status();
+    waterlooWorksEvaluatorMessage = "";
+  } catch (error: unknown) {
+    waterlooWorksEvaluatorMessage =
+      error instanceof Error
+        ? `Evaluator setup could not be checked. ${error.message}`
+        : "Evaluator setup could not be checked.";
+  }
+  if (view === "settings") render();
+}
+
+async function saveWaterlooWorksEvaluatorConfig(): Promise<void> {
+  if (waterlooWorksEvaluatorSaving) return;
+  const apiKey = document.querySelector<HTMLInputElement>(
+    "#waterlooworks-evaluator-api-key",
+  );
+  const endpoint = document.querySelector<HTMLInputElement>(
+    "#waterlooworks-evaluator-endpoint",
+  );
+  const model = document.querySelector<HTMLInputElement>(
+    "#waterlooworks-evaluator-model",
+  );
+  const selectedFiles = document.querySelector<HTMLInputElement>(
+    "#waterlooworks-evaluator-files",
+  );
+  const button = document.querySelector<HTMLButtonElement>(
+    '[data-action="waterlooworks-save-evaluator"]',
+  );
+  if (!apiKey || !endpoint || !model || !selectedFiles) return;
+
+  const update: WaterlooWorksEvaluatorConfigUpdate = {};
+  if (apiKey.value.trim()) update.apiKey = apiKey.value.trim();
+  if (endpoint.value.trim()) update.endpoint = endpoint.value.trim();
+  if (model.value.trim()) update.model = model.value.trim();
+
+  const files: Partial<
+    Record<(typeof evaluatorConfigFileNames)[number], string>
+  > = {};
+  for (const file of Array.from(selectedFiles.files ?? [])) {
+    const name =
+      file.name === "profile.example.json" ? "profile.json" : file.name;
+    if (
+      !evaluatorConfigFileNames.includes(
+        name as (typeof evaluatorConfigFileNames)[number],
+      )
+    ) {
+      waterlooWorksEvaluatorMessage = `Unsupported evaluator file: ${file.name}.`;
+      render();
+      return;
+    }
+    if (file.size > 1024 * 1024) {
+      waterlooWorksEvaluatorMessage = `${file.name} is larger than 1 MB.`;
+      render();
+      return;
+    }
+    files[name as (typeof evaluatorConfigFileNames)[number]] =
+      await file.text();
+  }
+  if (Object.keys(files).length > 0)
+    update.files = files as Record<
+      (typeof evaluatorConfigFileNames)[number],
+      string
+    >;
+
+  waterlooWorksEvaluatorSaving = true;
+  if (button) button.disabled = true;
+  try {
+    waterlooWorksEvaluatorStatus =
+      await waterlooWorksEvaluatorConfigClient.save(update);
+    waterlooWorksEvaluatorMessage = waterlooWorksEvaluatorStatus.complete
+      ? "Evaluator setup saved and ready to use."
+      : "Saved. Add the API key and all five evaluator files to enable grading.";
+  } catch (error: unknown) {
+    waterlooWorksEvaluatorMessage =
+      error instanceof Error
+        ? `Evaluator setup was not saved. ${error.message}`
+        : "Evaluator setup was not saved.";
+  } finally {
+    waterlooWorksEvaluatorSaving = false;
+    render();
+  }
 }
 
 function localDate(date: Date): string {
@@ -638,6 +809,7 @@ function render(): void {
     today: "Today",
     tasks: "All tasks",
     taskmanager: "TaskManager",
+    waterlooworks: "WaterlooWorks",
     calendar: "Calendar",
     notes: "Scratch notes",
     links: "Quick links",
@@ -658,13 +830,27 @@ function render(): void {
     today: todayView,
     tasks: tasksView,
     taskmanager: taskManagerView,
+    waterlooworks: waterlooWorksView,
     calendar: calendarView,
     notes: notesView,
     links: linksView,
     settings: settingsView,
   };
-  root.innerHTML = views[view]();
+  root.innerHTML = `${nativeWorkspaceMessage ? `<p role="alert" class="empty">${escapeHtml(nativeWorkspaceMessage)}</p>` : ""}${views[view]()}`;
   bindViewActions();
+  document
+    .querySelectorAll<HTMLElement>('[data-widget-id="waterlooworks-jobs"]')
+    .forEach((widget) =>
+      waterlooWorksController.bindWidget(
+        widget,
+        () => {
+          view = "waterlooworks";
+          render();
+        },
+        render,
+      ),
+    );
+  if (view === "waterlooworks") waterlooWorksController.bind(root, render);
   updateHeaderActions();
   updateClocks();
   clockInterval = window.setInterval(updateClocks, 1000);
@@ -710,6 +896,10 @@ function todayView(): string {
   </div>`;
 }
 
+function waterlooWorksView(): string {
+  return `<div class="view-wrap">${waterlooWorksController.render()}</div>`;
+}
+
 function widgetStyleKey(widgetId: string): string {
   const segments = widgetId.split(".");
   return segments[segments.length - 1] ?? widgetId;
@@ -724,6 +914,7 @@ function widgetData() {
     selectedDate,
     focusDurationMinutes: state.settings.focusDurationMinutes,
     taskManager: taskManagerRuntime,
+    waterlooWorks: waterlooWorksController.widgetData(),
   };
 }
 
@@ -774,10 +965,13 @@ function widgetCard(widget: WidgetInstance): string {
     )
     .join("");
   const surface =
-    styleKey === "links"
+    styleKey === "links" || widget.widgetId === "waterlooworks.jobs"
       ? `<div class="widget-surface" data-action="open-widget" data-widget-id="${widget.id}" role="button" tabindex="0" aria-label="Open ${meta.title}">`
       : `<button class="widget-surface" data-action="open-widget" data-widget-id="${widget.id}" aria-label="Open ${meta.title}">`;
-  const surfaceEnd = styleKey === "links" ? "</div>" : "</button>";
+  const surfaceEnd =
+    styleKey === "links" || widget.widgetId === "waterlooworks.jobs"
+      ? "</div>"
+      : "</button>";
   return `<article class="desk-widget widget-${styleKey} dimension-${widget.dimension} ${widgetEditMode ? "editing" : ""}" data-widget-id="${widget.id}" data-widget-columns="${columns}" data-widget-rows="${rows}" style="--widget-columns:${columns};--widget-rows:${rows};" draggable="${widgetEditMode}">
     ${widgetEditMode ? `<div class="widget-edit-controls"><label class="sr-only" for="widget-dimension-${widget.id}">Choose widget dimensions</label><select id="widget-dimension-${widget.id}" class="widget-dimension-select" data-action="set-widget-dimension" data-widget-id="${widget.id}" title="Choose dimensions">${dimensionOptions}</select><button data-action="hide-widget" data-widget-id="${widget.id}" title="Hide widget">−</button></div><div class="drag-handle">••••••</div>` : ""}
     ${surface}
@@ -811,6 +1005,11 @@ function openWidget(widgetId: string): void {
     (item) => item.id === widgetId,
   );
   if (!widget) return;
+  if (widget.widgetId === "waterlooworks.jobs") {
+    view = "waterlooworks";
+    render();
+    return;
+  }
   const meta = registries.widgets.require(widget.widgetId).manifest;
   const styleKey = widgetStyleKey(widget.widgetId);
   const tasks = state.tasks.filter((task) => task.date === selectedDate);
@@ -946,7 +1145,7 @@ function toggleWidgetFromSettings(widgetId: string): void {
 
 function restoreDefaultDashboard(): void {
   if (!window.confirm("Restore the default dashboard layout?")) return;
-  state.widgetLayout = createDefaultWidgetLayout();
+  state.widgetLayout = withWaterlooWorksWidget(createDefaultWidgetLayout());
   persist(true);
 }
 
@@ -1398,6 +1597,20 @@ function settingsView(): string {
   const googleCalendarSyncLabel = googleCalendarLastSyncAt
     ? `Last sync ${new Intl.DateTimeFormat("en", { dateStyle: "medium", timeStyle: "short" }).format(new Date(googleCalendarLastSyncAt))}`
     : "Not synced yet";
+  const evaluatorFiles = waterlooWorksEvaluatorStatus?.files;
+  const evaluatorReady = waterlooWorksEvaluatorStatus?.complete;
+  const evaluatorStatus = !isNativeBridgeAvailable()
+    ? "Available in FocusDesk for macOS"
+    : evaluatorReady
+      ? "Ready"
+      : waterlooWorksEvaluatorStatus
+        ? "Needs setup"
+        : "Checking setup";
+  const evaluatorFileSummary = evaluatorFiles
+    ? evaluatorConfigFileNames.every((name) => evaluatorFiles[name])
+      ? "Existing WaterlooWorks evaluator configuration imported automatically."
+      : "Existing evaluator configuration not found."
+    : "Checking existing WaterlooWorks evaluator configuration…";
 
   return `<div class="view-wrap settings-view">
     <div class="title-row"><div><p class="eyebrow">Make it yours</p><h1>Settings</h1><p class="date-line">Tune FocusDesk and each tool to fit the way you work.</p></div><button class="secondary-button" data-action="settings-reset">Reset settings</button></div>
@@ -1415,6 +1628,7 @@ function settingsView(): string {
       <section class="settings-section"><div class="settings-section-heading"><div><span class="settings-section-icon">◎</span><div><h2>Focus timer</h2><p>Set the length of a focused work session.</p></div></div></div><div class="settings-field-stack">
         <label class="settings-field"><span>Session length</span><small>Used by the Focus widget and timer.</small><select data-setting="focusDurationMinutes"><option value="15" ${state.settings.focusDurationMinutes === 15 ? "selected" : ""}>15 minutes</option><option value="25" ${state.settings.focusDurationMinutes === 25 ? "selected" : ""}>25 minutes</option><option value="45" ${state.settings.focusDurationMinutes === 45 ? "selected" : ""}>45 minutes</option><option value="60" ${state.settings.focusDurationMinutes === 60 ? "selected" : ""}>60 minutes</option><option value="90" ${state.settings.focusDurationMinutes === 90 ? "selected" : ""}>90 minutes</option></select></label>
       </div></section>
+      <section class="settings-section settings-section-wide"><div class="settings-section-heading"><div><span class="settings-section-icon">↗</span><div><h2>WaterlooWorks evaluator</h2><p>Set up local AI grading for your Co-op job reviews.</p></div></div><span class="settings-saved">${escapeHtml(evaluatorStatus)}</span></div><div class="waterlooworks-evaluator-copy"><p>Your key is stored privately by FocusDesk, never in the app bundle or Git.</p><small>${escapeHtml(evaluatorFileSummary)}</small></div><div class="settings-control-grid waterlooworks-evaluator-fields"><label class="settings-field"><span>DeepSeek API key</span><small>${waterlooWorksEvaluatorStatus?.apiKeyConfigured ? "A key is already saved. Leave blank to keep it." : "Required to run AI grading."}</small><input id="waterlooworks-evaluator-api-key" type="password" autocomplete="off" spellcheck="false" placeholder="${waterlooWorksEvaluatorStatus?.apiKeyConfigured ? "Saved securely" : "sk-…"}"></label><label class="settings-field"><span>Endpoint</span><small>Optional. Defaults to DeepSeek’s HTTPS endpoint.</small><input id="waterlooworks-evaluator-endpoint" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://api.deepseek.com/chat/completions"></label><label class="settings-field"><span>Model</span><small>Optional. Defaults to deepseek-v4-flash.</small><input id="waterlooworks-evaluator-model" type="text" autocomplete="off" spellcheck="false" placeholder="deepseek-v4-flash"></label></div><div class="waterlooworks-evaluator-import"><details><summary>Replace evaluator configuration files (advanced)</summary><label class="settings-field"><span>Configuration files</span><small>Only use this if you are setting up FocusDesk on a computer without the existing WaterlooWorks evaluator.</small><input id="waterlooworks-evaluator-files" type="file" multiple accept=".json,.md,application/json,text/markdown,text/plain"></label></details><button class="primary-button" data-action="waterlooworks-save-evaluator" ${waterlooWorksEvaluatorSaving || !isNativeBridgeAvailable() ? "disabled" : ""}>${waterlooWorksEvaluatorSaving ? "Saving…" : "Save evaluator setup"}</button></div>${waterlooWorksEvaluatorMessage ? `<p class="waterlooworks-evaluator-message" role="status">${escapeHtml(waterlooWorksEvaluatorMessage)}</p>` : ""}</section>
       <section class="settings-section settings-section-wide"><div class="settings-section-heading"><div><span class="settings-section-icon">▣</span><div><h2>Google Calendar</h2><p>Pull selected calendars into FocusDesk and push FocusDesk events back to Google.</p></div></div><span class="settings-saved">${escapeHtml(googleCalendarStatus)}</span></div><div class="google-calendar-toolbar"><div><strong>${escapeHtml(googleCalendarSyncLabel)}</strong><small>${escapeHtml(googleCalendarMessage || (googleCalendarConnected ? "Selected calendars sync incrementally and are safe to refresh." : "Your Google refresh token stays in macOS Keychain."))}</small></div><div class="settings-tool-controls"><button class="${googleCalendarConnected ? "secondary-button" : "primary-button"}" data-action="google-calendar-connect" ${googleCalendarBusy || !publicEnvironment.googleClientId ? "disabled" : ""}>${googleCalendarConnected ? "Reconnect" : "Connect Google"}</button>${googleCalendarConnected ? `<button class="secondary-button" data-action="google-calendar-sync" ${googleCalendarBusy ? "disabled" : ""}>↻ Sync now</button><button class="secondary-button" data-action="google-calendar-disconnect" ${googleCalendarBusy ? "disabled" : ""}>Disconnect</button>` : ""}</div></div><label class="google-calendar-auto-sync"><input type="checkbox" data-action="google-calendar-auto-sync" ${state.settings.googleCalendarAutoSync ? "checked" : ""}><span><strong>Sync on app startup</strong><small>Refresh selected calendars when FocusDesk opens.</small></span></label><div class="google-calendar-list-heading"><strong>Calendars</strong><small>Checked calendars are pulled into the Calendar view.</small></div><div class="google-calendar-list">${googleCalendarRows}</div></section>
       <section class="settings-section"><div class="settings-section-heading"><div><span class="settings-section-icon">✦</span><div><h2>Dashboard tools</h2><p>Show, hide, and resize every widget from one place.</p></div></div></div><div class="settings-tool-list">${widgetRows}</div><button class="secondary-button settings-restore" data-action="settings-restore-dashboard">Restore default dashboard</button></section>
     </div>
@@ -1762,6 +1976,7 @@ function bindViewActions(): void {
       (button.onclick = () => {
         view = button.dataset.view as View;
         render();
+        if (view === "settings") void refreshWaterlooWorksEvaluatorConfig();
       }),
   );
   document.querySelectorAll<HTMLButtonElement>("[data-filter]").forEach(
@@ -1851,6 +2066,7 @@ function bindViewActions(): void {
     .forEach(
       (surface) =>
         (surface.onkeydown = (event) => {
+          if (event.target !== surface) return;
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
             surface.click();
@@ -1869,6 +2085,7 @@ function bindViewActions(): void {
   document.querySelectorAll<HTMLElement>("[data-action]:not(select)").forEach(
     (control) =>
       (control.onclick = (event) => {
+        if ((event.target as Element).closest("[data-ww-widget]")) return;
         const action = control.dataset.action;
         if (action === "taskmanager-refresh") {
           refreshTaskManagerView();
@@ -1900,6 +2117,10 @@ function bindViewActions(): void {
         }
         if (action === "settings-restore-dashboard") {
           restoreDefaultDashboard();
+          return;
+        }
+        if (action === "waterlooworks-save-evaluator") {
+          void saveWaterlooWorksEvaluatorConfig();
           return;
         }
         if (action === "google-calendar-connect") {
@@ -2255,8 +2476,11 @@ document.addEventListener("keydown", (event) => {
   }
 });
 
-void initializeFocusDeskTasks()
+void initializeNativeWorkspace()
+  .then(() => initializeFocusDeskTasks())
   .then(() => refreshTaskManagerRuntime())
+  .then(() => waterlooWorksController.initialize())
+  .then(() => refreshWaterlooWorksEvaluatorConfig())
   .then(() => syncGoogleCalendarOnStartup())
   .then(() => render());
 render();

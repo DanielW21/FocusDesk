@@ -21,6 +21,12 @@ jobs:
         run: npm run tsc:check
       - name: Test
         run: npm test
+      - name: Install WaterlooWorks dependencies
+        run: npm ci --prefix tools/waterlooworks
+      - name: Build WaterlooWorks service
+        run: npm run build --prefix tools/waterlooworks
+      - name: Test WaterlooWorks service
+        run: npm run test:waterlooworks
       - name: Lint
         run: npm run lint
       - name: Check formatting

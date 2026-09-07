@@ -4,6 +4,7 @@
 #import "../Database/FDFocusDeskDatabase.h"
 #import "../Database/FDTaskManagerDatabase.h"
 #import "../Integrations/FDGoogleCalendarClient.h"
+#import "../Integrations/FDWaterlooWorksClient.h"
 
 static NSString *const FDNativeBridgeVersion = @"1";
 
@@ -11,6 +12,7 @@ static NSString *const FDNativeBridgeVersion = @"1";
 @property (strong) FDFocusDeskDatabase *focusDeskDatabase;
 @property (strong) FDTaskManagerDatabase *taskManagerDatabase;
 @property (strong) FDGoogleCalendarClient *googleCalendarClient;
+@property (strong) FDWaterlooWorksClient *waterlooWorksClient;
 @end
 
 @implementation FDMessageBridge
@@ -21,6 +23,7 @@ static NSString *const FDNativeBridgeVersion = @"1";
         _focusDeskDatabase = [FDFocusDeskDatabase new];
         _taskManagerDatabase = [FDTaskManagerDatabase new];
         _googleCalendarClient = [FDGoogleCalendarClient new];
+        _waterlooWorksClient = [FDWaterlooWorksClient new];
     }
     return self;
 }
@@ -120,9 +123,46 @@ static NSString *const FDNativeBridgeVersion = @"1";
         return;
     }
 
+    if ([action isEqualToString:@"waterlooworks.request"] ||
+        [action isEqualToString:@"waterlooworks.config.status"] ||
+        [action isEqualToString:@"waterlooworks.config.save"]) {
+        NSURL *resourceRoot = [[[NSBundle mainBundle] resourceURL] URLByAppendingPathComponent:@"web" isDirectory:YES];
+        NSURL *frameURL = message.frameInfo.request.URL;
+        NSString *trustedPrefix = [resourceRoot.URLByResolvingSymlinksInPath.path stringByAppendingString:@"/"];
+        if (!message.frameInfo.isMainFrame || !frameURL.isFileURL ||
+            ![frameURL.URLByResolvingSymlinksInPath.path hasPrefix:trustedPrefix]) {
+            replyHandler([self errorResponseWithId:requestId code:@"UNTRUSTED_FRAME"
+                                          message:@"WaterlooWorks is available only to the bundled FocusDesk page."], nil);
+            return;
+        }
+        FDWaterlooWorksCompletion complete = ^(NSDictionary *response) {
+            NSMutableDictionary *envelope = [response mutableCopy];
+            envelope[@"id"] = requestId;
+            replyHandler(envelope, nil);
+        };
+        if ([action isEqualToString:@"waterlooworks.request"]) {
+            [self.waterlooWorksClient request:payload completion:complete];
+        } else if ([action isEqualToString:@"waterlooworks.config.status"]) {
+            if (payload.count != 0) {
+                replyHandler([self errorResponseWithId:requestId code:@"INVALID_REQUEST"
+                                              message:@"Evaluator status does not accept input."], nil);
+                return;
+            }
+            [self.waterlooWorksClient evaluatorConfigurationStatusWithCompletion:complete];
+        } else {
+            [self.waterlooWorksClient saveEvaluatorConfiguration:payload completion:complete];
+        }
+        return;
+    }
+
+    NSString *focusDeskOperation = nil;
     if ([action hasPrefix:@"focusdesk.tasks."]) {
-        NSString *operation = [action substringFromIndex:@"focusdesk.tasks.".length];
-        [self.focusDeskDatabase invokeOperation:operation payload:payload completion:^(NSDictionary *response) {
+        focusDeskOperation = [action substringFromIndex:@"focusdesk.tasks.".length];
+    } else if ([action hasPrefix:@"focusdesk.workspace."]) {
+        focusDeskOperation = [action substringFromIndex:@"focusdesk.".length];
+    }
+    if (focusDeskOperation) {
+        [self.focusDeskDatabase invokeOperation:focusDeskOperation payload:payload completion:^(NSDictionary *response) {
             if ([response[@"ok"] boolValue]) {
                 replyHandler(@{
                     @"id": requestId,

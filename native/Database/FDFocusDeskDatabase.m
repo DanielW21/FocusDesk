@@ -51,6 +51,10 @@ static NSInteger const FDFocusDeskDatabaseSchemaVersion = 1;
             response = [self saveTask:payload];
         } else if ([operation isEqualToString:@"delete"]) {
             response = [self deleteTask:payload];
+        } else if ([operation isEqualToString:@"workspace.load"]) {
+            response = [self loadWorkspace];
+        } else if ([operation isEqualToString:@"workspace.save"]) {
+            response = [self saveWorkspace:payload];
         } else {
             response = [self errorWithCode:@"UNKNOWN_DATABASE_OPERATION"
                                    message:[NSString stringWithFormat:@"Unknown FocusDesk database operation: %@", operation]];
@@ -99,6 +103,7 @@ static NSInteger const FDFocusDeskDatabaseSchemaVersion = 1;
         return;
     }
 
+    sqlite3_busy_timeout(self.database, 5000);
     char *errorMessage = NULL;
     const char *schemaSQL =
         "PRAGMA journal_mode = WAL;"
@@ -119,6 +124,11 @@ static NSInteger const FDFocusDeskDatabaseSchemaVersion = 1;
             "updated_at TEXT NOT NULL"
         ");"
         "CREATE INDEX IF NOT EXISTS tasks_date_index ON tasks(date, done);"
+        "CREATE TABLE IF NOT EXISTS workspace_state ("
+            "id INTEGER PRIMARY KEY CHECK(id = 1),"
+            "document_json TEXT NOT NULL,"
+            "updated_at TEXT NOT NULL"
+        ");"
         "INSERT OR IGNORE INTO metadata(key, value) VALUES ('schema_version', '1');";
     result = sqlite3_exec(self.database, schemaSQL, NULL, NULL, &errorMessage);
     if (result != SQLITE_OK) {
@@ -127,6 +137,56 @@ static NSInteger const FDFocusDeskDatabaseSchemaVersion = 1;
             : [self sqliteMessage];
         sqlite3_free(errorMessage);
     }
+}
+
+- (NSDictionary *)loadWorkspace {
+    sqlite3_stmt *statement = NULL;
+    if (sqlite3_prepare_v2(self.database,
+                           "SELECT document_json FROM workspace_state WHERE id = 1",
+                           -1, &statement, NULL) != SQLITE_OK) {
+        return [self sqliteErrorWithCode:@"FOCUSDESK_WORKSPACE_READ_FAILED"];
+    }
+
+    NSDictionary *document = nil;
+    int result = sqlite3_step(statement);
+    if (result == SQLITE_ROW) {
+        NSString *json = [self stringColumn:statement index:0];
+        NSData *data = [json dataUsingEncoding:NSUTF8StringEncoding];
+        id parsed = data ? [NSJSONSerialization JSONObjectWithData:data options:0 error:nil] : nil;
+        if ([parsed isKindOfClass:[NSDictionary class]]) document = parsed;
+    }
+    sqlite3_finalize(statement);
+    if (result != SQLITE_ROW && result != SQLITE_DONE) {
+        return [self sqliteErrorWithCode:@"FOCUSDESK_WORKSPACE_READ_FAILED"];
+    }
+    if (result == SQLITE_ROW && !document) {
+        return [self errorWithCode:@"INVALID_WORKSPACE" message:@"The saved workspace is unreadable. It has not been overwritten."];
+    }
+    return @{ @"ok": @YES, @"data": document ? @{ @"document": document } : @{} };
+}
+
+- (NSDictionary *)saveWorkspace:(NSDictionary *)payload {
+    NSDictionary *document = [payload[@"document"] isKindOfClass:[NSDictionary class]]
+        ? payload[@"document"]
+        : nil;
+    if (!document) return [self errorWithCode:@"INVALID_WORKSPACE" message:@"The workspace document must be an object."];
+
+    NSError *serializationError = nil;
+    NSData *data = [NSJSONSerialization dataWithJSONObject:document options:0 error:&serializationError];
+    if (!data) return [self errorWithCode:@"INVALID_WORKSPACE" message:serializationError.localizedDescription ?: @"The workspace document could not be serialized."];
+
+    NSString *json = [[NSString alloc] initWithData:data encoding:NSUTF8StringEncoding];
+    NSString *updatedAt = [document[@"updatedAt"] isKindOfClass:[NSString class]] ? document[@"updatedAt"] : @"";
+    sqlite3_stmt *statement = NULL;
+    const char *sql = "INSERT INTO workspace_state(id, document_json, updated_at) VALUES (1, ?, ?) ON CONFLICT(id) DO UPDATE SET document_json = excluded.document_json, updated_at = excluded.updated_at";
+    if (sqlite3_prepare_v2(self.database, sql, -1, &statement, NULL) != SQLITE_OK) return [self sqliteErrorWithCode:@"FOCUSDESK_WORKSPACE_WRITE_FAILED"];
+    sqlite3_bind_text(statement, 1, json.UTF8String, -1, SQLITE_TRANSIENT);
+    sqlite3_bind_text(statement, 2, updatedAt.UTF8String, -1, SQLITE_TRANSIENT);
+    int result = sqlite3_step(statement);
+    sqlite3_finalize(statement);
+    return result == SQLITE_DONE
+        ? @{ @"ok": @YES, @"data": @{ @"saved": @YES } }
+        : [self sqliteErrorWithCode:@"FOCUSDESK_WORKSPACE_WRITE_FAILED"];
 }
 
 - (NSDictionary *)healthResponse {

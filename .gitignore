@@ -2,6 +2,8 @@ node_modules/
 dist/
 release/
 .local/
+.waterlooworks-data/
+tools/waterlooworks/data/
 .agents/
 docs/
 .DS_Store
