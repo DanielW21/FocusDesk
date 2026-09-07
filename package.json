@@ -1,0 +1,30 @@
+{
+  "name": "focusdesk",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "npm run tsc:check && vite build",
+    "format": "prettier --check \"src/**/*.ts\" package.json tsconfig.json vite.config.ts eslint.config.js",
+    "format:fix": "prettier --write \"src/**/*.ts\" package.json tsconfig.json vite.config.ts eslint.config.js",
+    "lint": "eslint . --max-warnings=0",
+    "lint:fix": "eslint . --fix --max-warnings=0",
+    "preview": "vite preview",
+    "package:mac": "./build-native.sh",
+    "test": "vitest run",
+    "tsc:check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.9.1",
+    "prettier": "^3.9.6",
+    "typescript": "^5.6.3",
+    "typescript-eslint": "^8.69.0",
+    "vite": "^6.0.0",
+    "vitest": "^5.0.0"
+  },
+  "dependencies": {
+    "zod": "^4.5.4"
+  }
+}

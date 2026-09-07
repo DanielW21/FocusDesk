@@ -1,0 +1,41 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>FocusDesk</title>
+  <link rel="stylesheet" href="/src/base.css" />
+  <link rel="stylesheet" href="/src/ui.css" />
+  <link rel="stylesheet" href="/src/widgets.css" />
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><span class="brand-mark">✦</span><span>Focus<span class="brand-light">Desk</span></span></div>
+      <nav>
+        <p class="nav-label">Workspace</p>
+        <button class="nav-item active" data-view="today"><span>◷</span> Today <b id="today-count">0</b></button>
+        <button class="nav-item" data-view="tasks"><span>✓</span> All tasks</button>
+        <button class="nav-item" data-view="taskmanager"><span>↯</span> TaskManager</button>
+        <button class="nav-item" data-view="calendar"><span>▦</span> Calendar</button>
+        <button class="nav-item" data-view="notes"><span>✎</span> Scratch notes</button>
+        <button class="nav-item" data-view="links"><span>↗</span> Quick links</button>
+        <button class="nav-item" data-view="settings"><span>⚙</span> Settings</button>
+      </nav>
+      <div class="sidebar-bottom">
+        <div class="storage-note"><span class="status-dot"></span><span>Saved locally</span></div>
+        <p class="tiny">Your data stays in this browser.<br>Export a backup anytime.</p>
+        <button class="ghost-button" id="export-data">↓ Export backup</button>
+      </div>
+    </aside>
+
+    <main class="main-content">
+      <header class="topbar"><div class="breadcrumb">Workspace <span>/</span> <strong id="page-label">Today</strong></div><div class="top-actions"><button class="header-tool" data-action="toggle-preview" data-header-preview data-dashboard-only title="Toggle preview"><span>▯</span><span id="header-preview-label">Preview</span></button><button class="header-tool" data-action="toggle-widgets" data-header-customize data-dashboard-only title="Customize dashboard"><span>✦</span><span id="header-customize-label">Customize</span></button><button class="header-add-button" data-action="add-widget" data-header-add data-dashboard-only title="Add widget">＋</button><button class="icon-button" id="focus-search" title="Search">⌕</button><button class="avatar">DW</button></div></header>
+      <div id="view-root"></div>
+    </main>
+  </div>
+  <div class="modal-backdrop hidden" id="modal"><div class="modal"><button class="modal-close" id="modal-close">×</button><div id="modal-content"></div></div></div>
+  <input type="file" id="ics-input" accept=".ics,text/calendar" hidden />
+  <script type="module" src="/src/main.ts"></script>
+</body>
+</html>
