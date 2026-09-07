@@ -40,8 +40,6 @@ body {
   min-height: 0;
   overflow-y: auto;
 }
-  padding-top: 58px;
-}
 .topbar {
   -webkit-app-region: drag;
 }
