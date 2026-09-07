@@ -18,7 +18,28 @@ select {
 button {
   -webkit-app-region: no-drag;
 }
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  overflow: hidden;
+}
+
+.app-shell {
+  height: 100vh;
+  min-height: 0;
+}
+
 .sidebar {
+  padding-top: 58px;
+  flex: 0 0 245px;
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
+}
   padding-top: 58px;
 }
 .topbar {
@@ -30,6 +51,11 @@ button {
 }
 .main-content {
   max-width: 1180px;
+  flex: 1 1 auto;
+  min-width: 0;
+  height: 100vh;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 .header-actions {
