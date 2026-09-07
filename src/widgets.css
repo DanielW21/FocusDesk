@@ -57,13 +57,14 @@
 
 .widget-tasks .widget-surface { background: #f8f5ef; }
 .widget-tasks .widget-symbol { background: #db7555; }
-.bubble-task-list { flex: 1; margin-top: 12px; }
+.bubble-task-list { display: flex; min-height: 0; flex: 1; flex-direction: column; margin-top: 12px; overflow-y: auto; }
 .bubble-task-list > div { display: flex; align-items: center; gap: 9px; min-height: 29px; border-bottom: 1px solid rgba(50,59,53,.07); font-size: 11px; }
 .bubble-task-list > div i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #aab4ad; }
 .bubble-task-list > div i.high { background: #dd7152; }
 .bubble-task-list > div i.low { background: #81aeba; }
 .bubble-task-list > div span { overflow: hidden; flex: 1; white-space: nowrap; text-overflow: ellipsis; }
 .bubble-task-list > div small { color: #a0a9a2; font: 9px 'DM Mono',monospace; }
+.bubble-task-list > .task-manager-widget-task { flex: 1 0 29px; }
 .bubble-task-list p { color: #89938c; font-size: 12px; }
 .bubble-task-list > .task-manager-week-empty { min-height: 42px; border-bottom: 0; color: #89938c; }
 .bubble-task-list > .task-manager-week-empty strong { font-size: 12px; font-weight: 500; }
@@ -82,11 +83,11 @@
 
 .widget-schedule .widget-surface { padding: 16px 18px; background: #edf3f1; }
 .widget-schedule .widget-symbol { background: #70a09a; }
-.bubble-schedule { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 7px; margin-top: 8px; }
+.bubble-schedule { display: flex; min-height: 0; flex: 1; flex-direction: column; justify-content: center; gap: 7px; margin-top: 8px; overflow-y: auto; }
 .bubble-schedule > div:not(.free-day) { display: grid; grid-template-columns: 50px 1fr; gap: 9px; align-items: center; min-height: 29px; padding-left: 9px; border-left: 3px solid #83afa9; }
 .bubble-schedule time { color: #849b96; font: 8px 'DM Mono',monospace; }
 .bubble-schedule > div > span { overflow: hidden; font-size: 10px; font-weight: 600; white-space: nowrap; text-overflow: ellipsis; }
-.bubble-schedule.schedule-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--schedule-rows), minmax(0, auto)); grid-auto-flow: column; align-content: start; column-gap: 18px; row-gap: 6px; margin-top: 12px; }
+.bubble-schedule.schedule-columns { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); grid-template-rows: repeat(var(--schedule-rows), minmax(31px, 1fr)); grid-auto-flow: column; align-content: stretch; column-gap: 18px; row-gap: 6px; margin-top: 12px; }
 .bubble-schedule.schedule-columns > div:not(.free-day) { min-height: 31px; }
 .desk-widget[data-widget-rows="1"] .bubble-schedule { margin-top: 0; gap: 0; }
 .desk-widget[data-widget-rows="1"] .bubble-schedule > div:not(.free-day) { grid-template-columns: 43px 1fr; gap: 6px; min-height: 25px; padding-left: 6px; }
