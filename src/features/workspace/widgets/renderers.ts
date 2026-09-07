@@ -108,16 +108,11 @@ export function renderSchedule(
   const rows = dimensionRows(dimension);
   const columns = dimensionColumns(dimension);
   const useTwoColumns = rows >= 2 && columns >= 2;
-  const visibleEventCount = useTwoColumns
-    ? rows * 2
-    : rows <= 1
-      ? 1
-      : columns >= 4
-        ? 5
-        : 3;
+  const scheduleRows = useTwoColumns
+    ? Math.max(1, Math.ceil(events.length / 2))
+    : Math.max(1, events.length);
   const content = events.length
     ? events
-        .slice(0, visibleEventCount)
         .map(
           (event) =>
             `<div><time>${escapeHtml(event.time ?? "ALL DAY")}</time><span>${escapeHtml(event.title)}</span></div>`,
@@ -125,7 +120,7 @@ export function renderSchedule(
         .join("")
     : '<div class="free-day"><strong>Wide open</strong><span>No calendar events</span></div>';
   const scheduleClass = useTwoColumns ? " schedule-columns" : "";
-  return `<div class="bubble-schedule${scheduleClass}" style="--schedule-rows:${rows}">${content}</div>`;
+  return `<div class="bubble-schedule${scheduleClass}" style="--schedule-rows:${scheduleRows}">${content}</div>`;
 }
 
 export function renderFocus(context: WidgetRenderContext): string {
