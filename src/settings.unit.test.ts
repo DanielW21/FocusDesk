@@ -3,6 +3,22 @@ import { describe, expect, it } from "vitest";
 import { DEFAULT_FOCUSDESK_SETTINGS, parseFocusDeskSettings } from "./settings";
 
 describe("FocusDesk settings", () => {
+  it("defaults TaskManager to open tasks", () => {
+    expect(DEFAULT_FOCUSDESK_SETTINGS.taskManagerMode).toBe("list");
+  });
+
+  it("migrates the old all-tasks default without overriding an explicit choice", () => {
+    expect(
+      parseFocusDeskSettings({ taskManagerMode: "fulllist" }).taskManagerMode,
+    ).toBe("list");
+    expect(
+      parseFocusDeskSettings({
+        taskManagerMode: "fulllist",
+        taskManagerModeConfigured: true,
+      }).taskManagerMode,
+    ).toBe("fulllist");
+  });
+
   it("fills in defaults for older saved workspaces", () => {
     expect(parseFocusDeskSettings({ theme: "dark" })).toEqual({
       ...DEFAULT_FOCUSDESK_SETTINGS,

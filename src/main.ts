@@ -742,9 +742,13 @@ function applySettings(): void {
 }
 
 function updateSetting(key: keyof FocusDeskSettings, value: unknown): void {
-  const parsed = FocusDeskSettingsSchema.safeParse({
+  const nextSettings = {
     ...state.settings,
     [key]: value,
+    ...(key === "taskManagerMode" ? { taskManagerModeConfigured: true } : {}),
+  };
+  const parsed = FocusDeskSettingsSchema.safeParse({
+    ...nextSettings,
   });
   if (!parsed.success) return;
   state.settings = parsed.data;

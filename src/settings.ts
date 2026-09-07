@@ -22,6 +22,7 @@ export const FocusDeskSettingsSchema = z.object({
   density: FocusDeskDensitySchema,
   accent: FocusDeskAccentSchema,
   taskManagerMode: FocusDeskTaskManagerModeSchema,
+  taskManagerModeConfigured: z.boolean(),
   taskManagerProgressView: FocusDeskProgressViewSchema,
   taskManagerTodoDays: z.number().int().min(0).max(90),
   focusDurationMinutes: z.number().int().min(5).max(120),
@@ -38,7 +39,8 @@ export const DEFAULT_FOCUSDESK_SETTINGS: FocusDeskSettings = {
   theme: "light",
   density: "comfortable",
   accent: "coral",
-  taskManagerMode: "fulllist",
+  taskManagerMode: "list",
+  taskManagerModeConfigured: false,
   taskManagerProgressView: "compact",
   taskManagerTodoDays: 7,
   focusDurationMinutes: 25,
@@ -52,8 +54,15 @@ export const DEFAULT_FOCUSDESK_SETTINGS: FocusDeskSettings = {
 export function parseFocusDeskSettings(value: unknown): FocusDeskSettings {
   const parsed = FocusDeskSettingsSchema.partial().safeParse(value);
   if (!parsed.success) return { ...DEFAULT_FOCUSDESK_SETTINGS };
-  return {
+  const settings = {
     ...DEFAULT_FOCUSDESK_SETTINGS,
     ...parsed.data,
   };
+  const isLegacySettings =
+    value !== null &&
+    typeof value === "object" &&
+    !Object.prototype.hasOwnProperty.call(value, "taskManagerModeConfigured");
+  if (isLegacySettings && settings.taskManagerMode === "fulllist")
+    settings.taskManagerMode = "list";
+  return settings;
 }
