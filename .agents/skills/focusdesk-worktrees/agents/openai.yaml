@@ -1,0 +1,4 @@
+interface:
+  display_name: "FocusDesk Worktrees"
+  short_description: "Manage FocusDesk worktrees and isolated builds"
+  default_prompt: "Use $focusdesk-worktrees to set up or debug FocusDesk across multiple worktrees and terminals."
