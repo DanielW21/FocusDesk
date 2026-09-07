@@ -108,7 +108,7 @@ let googleCalendarMessage = "";
 let googleCalendarBusy = false;
 let googleCalendarSelectionInitialized = false;
 
-const GOOGLE_CALENDAR_SELECTION_VERSION = 1;
+const GOOGLE_CALENDAR_SELECTION_VERSION = 4;
 
 const starterState: AppState = {
   tasks: [
@@ -234,14 +234,35 @@ function initializeGoogleCalendarSelection(
   const existingIds = state.settings.googleCalendarIds.filter((id) =>
     calendars.some((calendar) => calendar.id === id),
   );
+  const birthdayIds = calendars
+    .filter((calendar) => {
+      const summary = calendar.summary.toLowerCase();
+      const id = calendar.id.toLowerCase();
+      return (
+        summary === "birthdays" || id.includes("contacts@group.v.calendar")
+      );
+    })
+    .map((calendar) => calendar.id);
+  const previouslySynced3BIds = calendars
+    .filter(
+      (calendar) =>
+        calendar.summary.trim().toLowerCase() === "3b" &&
+        state.events.some((event) => event.googleCalendarId === calendar.id),
+    )
+    .map((calendar) => calendar.id);
+  const baseIds =
+    hasSelectionMetadata &&
+    selectedIds.length > 0 &&
+    state.settings.googleCalendarSelectionVersion <
+      GOOGLE_CALENDAR_SELECTION_VERSION
+      ? selectedIds
+      : existingIds;
+  const nextIds = [
+    ...new Set([...baseIds, ...birthdayIds, ...previouslySynced3BIds]),
+  ];
   state.settings = {
     ...state.settings,
-    googleCalendarIds:
-      hasSelectionMetadata && selectedIds.length > 0
-        ? selectedIds
-        : existingIds.length > 0
-          ? existingIds
-          : [firstCalendar.id],
+    googleCalendarIds: nextIds.length > 0 ? nextIds : [firstCalendar.id],
     googleCalendarSelectionInitialized: true,
     googleCalendarSelectionVersion: GOOGLE_CALENDAR_SELECTION_VERSION,
   };
@@ -465,8 +486,35 @@ async function saveCalendarEvent(event: CalendarEvent): Promise<void> {
   }
 }
 
-// Keep the Google Calendar write path available until calendar editor actions are wired.
-void saveCalendarEvent;
+async function deleteCalendarEvent(event: CalendarEvent): Promise<boolean> {
+  if (event.source !== "focusdesk") return false;
+
+  const configuration = googleCalendarConfiguration();
+  if (event.googleEventId) {
+    if (
+      !configuration ||
+      !isNativeBridgeAvailable() ||
+      !googleCalendarConnected
+    ) {
+      googleCalendarMessage =
+        "Reconnect Google Calendar before deleting a synced event.";
+      return false;
+    }
+    try {
+      await googleCalendarClient.delete(configuration, event);
+    } catch (error) {
+      googleCalendarMessage =
+        error instanceof Error
+          ? error.message
+          : "Google Calendar could not delete this event.";
+      return false;
+    }
+  }
+
+  state.events = state.events.filter((item) => item.id !== event.id);
+  appDatabase.save(state);
+  return true;
+}
 
 async function saveFocusDeskTask(task: Task): Promise<boolean> {
   try {
@@ -772,12 +820,15 @@ function openWidget(widgetId: string): void {
     notes: "Open notes",
     links: "Open links",
   };
+  const detailBody =
+    styleKey === "schedule"
+      ? `<div class="detail-events schedule-detail-events">${eventsFor(selectedDate) || '<div class="empty">No events on this day.</div>'}</div>`
+      : `<div class="widget-detail-body widget-${styleKey}">${renderWidgetBody(widget, largestDimension(meta.supportedDimensions), { ...widget.settings, taskManagerExpanded: styleKey === "task-manager" })}</div>`;
 
   showModal(`<div class="widget-detail">
     <div class="widget-detail-head"><div class="widget-detail-icon widget-${styleKey}">${meta.icon}</div><div><div class="modal-kicker">${meta.description}</div><h2>${meta.title}</h2></div></div>
-    <div class="widget-detail-body widget-${styleKey}">${renderWidgetBody(widget, largestDimension(meta.supportedDimensions), { ...widget.settings, taskManagerExpanded: styleKey === "task-manager" })}</div>
+    ${detailBody}
     ${styleKey === "tracker" || styleKey === "tasks" ? `<div class="detail-task-list">${taskList(tasks)}</div>` : ""}
-    ${styleKey === "schedule" ? `<div class="detail-events">${eventsFor(selectedDate) || '<div class="empty">No events on this day.</div>'}</div>` : ""}
     ${styleKey === "focus" ? `<button class="primary-button detail-primary" id="detail-focus">Start a ${state.settings.focusDurationMinutes} minute session</button>` : ""}
     ${actionLabels[styleKey] ? `<button class="secondary-button detail-primary" id="detail-navigate">${actionLabels[styleKey]}</button>` : ""}
   </div>`);
@@ -1228,7 +1279,7 @@ function eventsFor(date: string): string {
     )
     .map(
       (event) =>
-        `<div class="event ${event.source === "focusdesk" ? "event-editable" : ""}" ${event.source === "focusdesk" ? `data-action="edit-calendar-event" data-id="${event.id}" role="button" tabindex="0"` : ""}><div class="event-time">${escapeHtml(event.time || "ALL DAY")}</div><div class="event-body"><div class="event-title">${escapeHtml(event.title)}</div><div class="event-sub">${escapeHtml(event.calendar || (event.source === "google" ? "Google Calendar" : "Imported calendar"))}${event.source === "focusdesk" ? " · editable" : " · read-only"}</div></div></div>`,
+        `<div class="event ${event.source === "focusdesk" ? "event-editable" : ""} ${event.source === "google" ? "google-event" : ""}"${calendarEventStyle(event)} ${event.source === "focusdesk" ? `data-action="edit-calendar-event" data-id="${event.id}" role="button" tabindex="0"` : ""}><div class="event-time">${escapeHtml(event.time || "ALL DAY")}</div><div class="event-body"><div class="event-title">${escapeHtml(event.title)}</div><div class="event-sub">${escapeHtml(event.calendar || (event.source === "google" ? "Google Calendar" : "Imported calendar"))}${event.source === "focusdesk" ? " · editable" : " · read-only"}</div></div></div>`,
     )
     .join("");
 }
@@ -1248,7 +1299,7 @@ function calendarView(): string {
           state.settings.googleCalendarIds.includes(event.googleCalendarId)),
     );
     const tasks = state.tasks.filter((task) => task.date === date);
-    cells += `<div class="day-cell ${date === localDate(now) ? "today-cell" : ""}"><button class="day-num ${date === localDate(now) ? "today-num" : ""}" data-action="select-date" data-date="${date}">${day}</button>${events.map((event) => `<div class="cal-event ${event.source === "focusdesk" ? "focusdesk-event" : "google-event"}" ${event.source === "focusdesk" ? `data-action="edit-calendar-event" data-id="${event.id}" role="button" tabindex="0" title="Edit ${escapeHtml(event.title)}"` : `title="${escapeHtml(event.title)} · read-only"`}>${escapeHtml(event.title)}</div>`).join("")}${tasks.map((task) => `<div class="cal-event task-event">${task.done ? "✓ " : ""}${escapeHtml(task.title)}</div>`).join("")}</div>`;
+    cells += `<div class="day-cell ${date === localDate(now) ? "today-cell" : ""}"><button class="day-num ${date === localDate(now) ? "today-num" : ""}" data-action="select-date" data-date="${date}">${day}</button>${events.map((event) => `<div class="cal-event ${event.source === "focusdesk" ? "focusdesk-event" : "google-event"}"${calendarEventStyle(event)} ${event.source === "focusdesk" ? `data-action="edit-calendar-event" data-id="${event.id}" role="button" tabindex="0" title="Edit ${escapeHtml(event.title)}"` : `title="${escapeHtml(event.title)} · read-only"`}>${escapeHtml(event.title)}</div>`).join("")}${tasks.map((task) => `<div class="cal-event task-event">${task.done ? "✓ " : ""}${escapeHtml(task.title)}</div>`).join("")}</div>`;
   }
   return `<div class="view-wrap"><div class="title-row"><div><p class="eyebrow">Plan with perspective</p><h1>Calendar</h1><p class="date-line">Google events are read-only. FocusDesk events can be added and edited here.</p></div><div class="calendar-tools"><button class="secondary-button" data-action="import-ics">＋ Import .ics</button><button class="secondary-button" data-action="google-calendar-sync">↻ Sync</button><button class="primary-button" data-action="add-calendar-event">＋ Event</button><button class="secondary-button" data-action="add-task">＋ Task</button></div></div><div class="panel calendar-panel"><div class="calendar-head"><h2>${new Intl.DateTimeFormat("en", { month: "long", year: "numeric" }).format(calendarDate)}</h2><div class="calendar-nav"><button data-action="prev-month">‹</button><button data-action="calendar-today">Today</button><button data-action="next-month">›</button></div></div><div class="calendar-grid">${["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"].map((day) => `<div class="day-name">${day}</div>`).join("")}${cells}</div></div></div>`;
 }
@@ -1265,6 +1316,35 @@ function googleCalendarColor(calendar: GoogleCalendarSummary): string {
   return /^#[0-9a-f]{6}$/i.test(calendar.backgroundColor ?? "")
     ? calendar.backgroundColor!
     : "#789080";
+}
+
+const GOOGLE_CALENDAR_FALLBACK_COLORS = [
+  "#4b8fd8",
+  "#d96f4e",
+  "#63b37c",
+  "#9a72c8",
+  "#d29a3a",
+  "#5ba9a4",
+];
+
+function googleCalendarEventColor(event: CalendarEvent): string | undefined {
+  if (event.source !== "google" || !event.googleCalendarId) return undefined;
+  const calendar = googleCalendarCalendars.find(
+    (item) => item.id === event.googleCalendarId,
+  );
+  if (calendar) return googleCalendarColor(calendar);
+  let hash = 0;
+  for (const character of event.googleCalendarId) {
+    hash = (hash * 31 + character.charCodeAt(0)) | 0;
+  }
+  return GOOGLE_CALENDAR_FALLBACK_COLORS[
+    Math.abs(hash) % GOOGLE_CALENDAR_FALLBACK_COLORS.length
+  ];
+}
+
+function calendarEventStyle(event: CalendarEvent): string {
+  const color = googleCalendarEventColor(event);
+  return color ? ` style="--calendar-event-color:${color}"` : "";
 }
 
 function settingsView(): string {
@@ -1387,9 +1467,37 @@ function openEditor(
   }[type];
 
   showModal(
-    `<div class="modal-kicker">${editId ? "EDIT" : "NEW"}</div><h2>${forms[0]}</h2>${forms[1]}<div class="modal-footer"><button class="secondary-button" data-modal-close>Cancel</button><button class="primary-button" id="save-modal">${editId ? "Save changes" : "Add to FocusDesk"}</button></div>`,
+    `<div class="modal-kicker">${editId ? "EDIT" : "NEW"}</div><h2>${forms[0]}</h2>${forms[1]}${type === "event" && event ? '<small class="form-hint calendar-delete-error" id="calendar-delete-error" role="alert"></small>' : ""}<div class="modal-footer">${type === "event" && event ? '<button class="danger-button" id="delete-calendar-event">Delete event</button>' : ""}<span class="modal-footer-spacer"></span><button class="secondary-button" data-modal-close>Cancel</button><button class="primary-button" id="save-modal">${editId ? "Save changes" : "Add to FocusDesk"}</button></div>`,
   );
   element<HTMLInputElement>("#f-title").focus();
+  if (type === "event" && event) {
+    element<HTMLButtonElement>("#delete-calendar-event").onclick = async () => {
+      const deleteButton = element<HTMLButtonElement>("#delete-calendar-event");
+      const deleteError = element<HTMLElement>("#calendar-delete-error");
+      if (deleteButton.dataset.confirm !== "true") {
+        deleteButton.dataset.confirm = "true";
+        deleteButton.textContent = "Confirm delete";
+        deleteError.textContent = event.googleEventId
+          ? "Click again to delete this event from FocusDesk and Google Calendar."
+          : "Click again to delete this event from FocusDesk.";
+        return;
+      }
+      const saveButton = element<HTMLButtonElement>("#save-modal");
+      deleteButton.disabled = true;
+      saveButton.disabled = true;
+      if (await deleteCalendarEvent(event)) {
+        closeModal();
+        render();
+        return;
+      }
+      deleteButton.disabled = false;
+      saveButton.disabled = false;
+      deleteButton.dataset.confirm = "";
+      deleteButton.textContent = "Delete event";
+      deleteError.textContent =
+        googleCalendarMessage || "FocusDesk could not delete this event.";
+    };
+  }
   element<HTMLButtonElement>("#save-modal").onclick = async () => {
     const title = element<HTMLInputElement>("#f-title").value.trim();
     if (!title) return;

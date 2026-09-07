@@ -66,11 +66,7 @@ function matchesGoogleEvent(
   ) {
     return true;
   }
-  return Boolean(
-    snapshot.iCalUID &&
-    event.googleCalendarId === snapshot.calendarId &&
-    event.googleICalUID === snapshot.iCalUID,
-  );
+  return false;
 }
 
 function sourceForPulledEvent(

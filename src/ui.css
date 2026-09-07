@@ -459,7 +459,21 @@ kbd {
   border-color: var(--accent);
 }
 .cal-event.google-event {
-  opacity: 0.86;
+  opacity: 0.95;
+  color: color-mix(
+    in srgb,
+    var(--calendar-event-color, var(--blue)) 72%,
+    var(--ink)
+  );
+  background: color-mix(
+    in srgb,
+    var(--calendar-event-color, var(--blue)) 18%,
+    var(--surface)
+  );
+  border-left: 3px solid var(--calendar-event-color, var(--blue));
+}
+.event.google-event .event-body {
+  border-left-color: var(--calendar-event-color, var(--blue));
 }
 .event-editable {
   cursor: pointer;
@@ -469,6 +483,33 @@ kbd {
 }
 .event-editable:hover {
   background: var(--surface-subtle);
+}
+.danger-button {
+  border: 1px solid #e4b9aa;
+  border-radius: 7px;
+  padding: 10px 13px;
+  color: #a34f38;
+  background: #fff7f3;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+}
+.danger-button:hover {
+  border-color: #d96f4e;
+  background: #fff0e9;
+}
+.danger-button:disabled,
+.primary-button:disabled,
+.secondary-button:disabled {
+  cursor: wait;
+  opacity: 0.55;
+}
+.modal-footer-spacer {
+  flex: 1;
+}
+.calendar-delete-error {
+  min-height: 0;
+  color: #a34f38;
 }
 .calendar-nav {
   display: flex;

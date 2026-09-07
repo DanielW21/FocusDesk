@@ -188,7 +188,10 @@ export function createGoogleCalendarClient(
     async delete(configuration, event) {
       assertWriteOperation(event, "update");
       await call("googleCalendar.delete", {
-        ...configPayload(configuration),
+        ...configPayload({
+          ...configuration,
+          calendarId: event.googleCalendarId ?? configuration.calendarId,
+        }),
         event,
       });
     },

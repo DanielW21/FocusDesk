@@ -105,23 +105,27 @@ export function renderSchedule(
   const events = data.events.filter(
     (event) => event.date === data.selectedDate,
   );
+  const rows = dimensionRows(dimension);
+  const columns = dimensionColumns(dimension);
+  const useTwoColumns = rows >= 2 && columns >= 2;
+  const visibleEventCount = useTwoColumns
+    ? rows * 2
+    : rows <= 1
+      ? 1
+      : columns >= 4
+        ? 5
+        : 3;
   const content = events.length
     ? events
-        .slice(
-          0,
-          dimensionRows(dimension) <= 1
-            ? 1
-            : dimensionRows(dimension) >= 3 || dimensionColumns(dimension) >= 4
-              ? 5
-              : 3,
-        )
+        .slice(0, visibleEventCount)
         .map(
           (event) =>
             `<div><time>${escapeHtml(event.time ?? "ALL DAY")}</time><span>${escapeHtml(event.title)}</span></div>`,
         )
         .join("")
     : '<div class="free-day"><strong>Wide open</strong><span>No calendar events</span></div>';
-  return `<div class="bubble-schedule">${content}</div>`;
+  const scheduleClass = useTwoColumns ? " schedule-columns" : "";
+  return `<div class="bubble-schedule${scheduleClass}" style="--schedule-rows:${rows}">${content}</div>`;
 }
 
 export function renderFocus(context: WidgetRenderContext): string {

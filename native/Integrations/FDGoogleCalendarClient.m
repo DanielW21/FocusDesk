@@ -15,6 +15,7 @@ static NSString *const FDGoogleScopesDefaultsKey = @"googleCalendar.scopes";
 static NSString *const FDGoogleCalendarIDDefaultsKey = @"googleCalendar.calendarId";
 static NSString *const FDGoogleLastSyncDefaultsKey = @"googleCalendar.lastSyncAt";
 static NSString *const FDGoogleClientSecretInfoKey = @"FDGoogleClientSecret";
+static NSString *const FDGoogleBirthdaysCalendarId = @"focusdesk-birthdays";
 
 typedef void (^FDGoogleJSONCompletion)(NSDictionary *_Nullable json,
                                        NSInteger statusCode,
@@ -522,6 +523,7 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
             return;
         }
         NSMutableArray *calendars = [NSMutableArray array];
+        BOOL hasBirthdaysCalendar = NO;
         NSArray *items = [json[@"items"] isKindOfClass:[NSArray class]] ? json[@"items"] : @[];
         for (NSDictionary *item in items) {
             if (![item isKindOfClass:[NSDictionary class]]) continue;
@@ -530,6 +532,10 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
             NSString *summary = [item[@"summaryOverride"] isKindOfClass:[NSString class]] && [item[@"summaryOverride"] length] > 0
                 ? item[@"summaryOverride"]
                 : ([item[@"summary"] isKindOfClass:[NSString class]] && [item[@"summary"] length] > 0 ? item[@"summary"] : calendarId);
+            if ([summary caseInsensitiveCompare:@"birthdays"] == NSOrderedSame ||
+                [calendarId rangeOfString:@"contacts@group.v.calendar" options:NSCaseInsensitiveSearch].location != NSNotFound) {
+                hasBirthdaysCalendar = YES;
+            }
             NSMutableDictionary *calendar = [NSMutableDictionary dictionaryWithDictionary:@{
                 @"id": calendarId,
                 @"summary": summary,
@@ -540,6 +546,15 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
             if ([item[@"backgroundColor"] isKindOfClass:[NSString class]]) calendar[@"backgroundColor"] = item[@"backgroundColor"];
             if ([item[@"accessRole"] isKindOfClass:[NSString class]]) calendar[@"accessRole"] = item[@"accessRole"];
             [calendars addObject:calendar];
+        }
+        if (!hasBirthdaysCalendar) {
+            [calendars addObject:@{
+                @"id": FDGoogleBirthdaysCalendarId,
+                @"summary": @"Birthdays",
+                @"accessRole": @"reader",
+                @"selected": @YES,
+                @"backgroundColor": @"#63B37C",
+            }];
         }
         completion([self successWithData:@{ @"calendars": calendars }]);
     }];
@@ -582,7 +597,10 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
     }
     NSString *calendarId = calendarIds[index];
     NSString *syncToken = fullSync ? nil : [self.defaults stringForKey:[self syncTokenKeyForCalendar:calendarId]];
-    [self fetchEventsForCalendar:calendarId syncToken:syncToken pageToken:nil items:@[] allowReset:YES completion:^(NSDictionary *result, NSString *errorMessage) {
+    BOOL birthdaysOnly = [calendarId isEqualToString:FDGoogleBirthdaysCalendarId];
+    NSString *requestCalendarId = birthdaysOnly ? @"primary" : calendarId;
+    NSArray *eventTypes = birthdaysOnly ? @[ @"birthday" ] : @[];
+    [self fetchEventsForCalendar:requestCalendarId normalizedCalendarId:calendarId eventTypes:eventTypes syncToken:syncToken pageToken:nil items:@[] allowReset:YES completion:^(NSDictionary *result, NSString *errorMessage) {
         if (errorMessage) {
             completion([self errorWithCode:@"GOOGLE_CALENDAR_SYNC_FAILED" message:errorMessage]);
             return;
@@ -596,6 +614,8 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
 }
 
 - (void)fetchEventsForCalendar:(NSString *)calendarId
+          normalizedCalendarId:(NSString *)normalizedCalendarId
+                    eventTypes:(NSArray<NSString *> *)eventTypes
                      syncToken:(NSString *)syncToken
                      pageToken:(NSString *)pageToken
                          items:(NSArray *)items
@@ -609,6 +629,9 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
         [NSURLQueryItem queryItemWithName:@"showDeleted" value:@"true"],
         [NSURLQueryItem queryItemWithName:@"maxResults" value:@"2500"],
     ]];
+    for (NSString *eventType in eventTypes) {
+        [queryItems addObject:[NSURLQueryItem queryItemWithName:@"eventTypes" value:eventType]];
+    }
     if (syncToken.length > 0) {
         [queryItems addObject:[NSURLQueryItem queryItemWithName:@"syncToken" value:syncToken]];
     } else {
@@ -621,7 +644,7 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
     [self performAuthorizedRequest:request retry:NO completion:^(NSDictionary *json, NSInteger statusCode, NSString *errorMessage) {
         if (statusCode == 410 && allowReset) {
             [self.defaults removeObjectForKey:[self syncTokenKeyForCalendar:calendarId]];
-            [self fetchEventsForCalendar:calendarId syncToken:nil pageToken:nil items:@[] allowReset:NO completion:completion];
+            [self fetchEventsForCalendar:calendarId normalizedCalendarId:normalizedCalendarId eventTypes:eventTypes syncToken:nil pageToken:nil items:@[] allowReset:NO completion:completion];
             return;
         }
         if (errorMessage) {
@@ -632,7 +655,7 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
         NSArray *allItems = [items arrayByAddingObjectsFromArray:pageItems];
         NSString *nextPageToken = [json[@"nextPageToken"] isKindOfClass:[NSString class]] ? json[@"nextPageToken"] : nil;
         if (nextPageToken.length > 0) {
-            [self fetchEventsForCalendar:calendarId syncToken:syncToken pageToken:nextPageToken items:allItems allowReset:allowReset completion:completion];
+            [self fetchEventsForCalendar:calendarId normalizedCalendarId:normalizedCalendarId eventTypes:eventTypes syncToken:syncToken pageToken:nextPageToken items:allItems allowReset:allowReset completion:completion];
             return;
         }
         NSString *nextSyncToken = [json[@"nextSyncToken"] isKindOfClass:[NSString class]] ? json[@"nextSyncToken"] : nil;
@@ -640,11 +663,15 @@ typedef void (^FDGoogleTokenCompletion)(NSString *_Nullable token,
         NSMutableArray *deleted = [NSMutableArray array];
         for (NSDictionary *item in allItems) {
             if (![item isKindOfClass:[NSDictionary class]]) continue;
+            NSString *eventCalendarId = normalizedCalendarId ?: calendarId;
+            if ([item[@"eventType"] isEqualToString:@"birthday"] && [calendarId isEqualToString:@"primary"]) {
+                eventCalendarId = FDGoogleBirthdaysCalendarId;
+            }
             if ([item[@"status"] isEqualToString:@"cancelled"]) {
-                NSDictionary *deletedEvent = [self normalizedDeletedEvent:item calendarId:calendarId];
+                NSDictionary *deletedEvent = [self normalizedDeletedEvent:item calendarId:eventCalendarId];
                 if (deletedEvent) [deleted addObject:deletedEvent];
             } else {
-                NSDictionary *normalized = [self normalizedEvent:item calendarId:calendarId];
+                NSDictionary *normalized = [self normalizedEvent:item calendarId:eventCalendarId];
                 if (!normalized) continue;
                 [events addObject:normalized];
             }

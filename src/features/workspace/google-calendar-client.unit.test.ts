@@ -56,4 +56,26 @@ describe("GoogleCalendarClient write protection", () => {
       event,
     });
   });
+
+  it("deletes a FocusDesk event from its owning calendar", async () => {
+    const invoke = vi.fn().mockResolvedValue({});
+    const client = createGoogleCalendarClient(invoke);
+    const event: CalendarEvent = {
+      id: 3,
+      title: "FocusDesk event",
+      date: "2026-09-10",
+      source: "focusdesk",
+      googleCalendarId: "3b-calendar",
+      googleEventId: "google-3",
+    };
+
+    await client.delete(configuration, event);
+
+    expect(invoke).toHaveBeenCalledWith("googleCalendar.delete", {
+      clientId: configuration.clientId,
+      scopes: configuration.scopes,
+      calendarId: "3b-calendar",
+      event,
+    });
+  });
 });

@@ -96,6 +96,30 @@ describe("calendar sync", () => {
     expect(twice[0]?.source).toBe("google");
   });
 
+  it("keeps recurring instances separate when they share an iCal UID", () => {
+    const seriesUid = "class-series@example.com";
+    const first = upsertPulledGoogleEvent([], {
+      id: "series-instance-1",
+      calendarId: "3b",
+      iCalUID: seriesUid,
+      title: "BME 362 LEC",
+      date: "2026-10-19",
+    });
+    const second = upsertPulledGoogleEvent(first, {
+      id: "series-instance-2",
+      calendarId: "3b",
+      iCalUID: seriesUid,
+      title: "BME 362 LEC",
+      date: "2026-10-26",
+    });
+
+    expect(second).toHaveLength(2);
+    expect(second.map((event) => event.date)).toEqual([
+      "2026-10-19",
+      "2026-10-26",
+    ]);
+  });
+
   it("removes remote deletions without writing them back", () => {
     const next = reconcileGoogleCalendarSync(
       [
@@ -114,5 +138,41 @@ describe("calendar sync", () => {
     );
 
     expect(next).toEqual([]);
+  });
+
+  it("rebuilds selected Google calendars during a full sync", () => {
+    const next = reconcileGoogleCalendarSync(
+      [
+        {
+          id: 7,
+          title: "Old recurring instance",
+          date: "2026-09-08",
+          source: "google",
+          googleCalendarId: "3b",
+          googleEventId: "old-instance",
+        },
+      ],
+      {
+        connected: true,
+        calendarId: "3b",
+        events: [
+          {
+            id: "new-instance",
+            calendarId: "3b",
+            title: "New recurring instance",
+            date: "2026-09-09",
+          },
+        ],
+        deleted: [],
+      },
+      true,
+      ["3b"],
+    );
+
+    expect(next).toHaveLength(1);
+    expect(next[0]).toMatchObject({
+      title: "New recurring instance",
+      date: "2026-09-09",
+    });
   });
 });
