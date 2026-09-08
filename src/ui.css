@@ -345,6 +345,16 @@ kbd {
 .task {
   padding: 0 2px;
 }
+.task .check {
+  display: grid;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 18px;
+  place-items: center;
+  margin: 0;
+  padding: 0;
+  line-height: 1;
+}
 .task-title {
   flex: 1;
   overflow: hidden;

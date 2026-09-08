@@ -103,10 +103,10 @@ export function renderTasks(
               ? 6
               : 3,
         )
-        .map(
-          (task) =>
-            `<div><i class="${task.priority ?? "normal"}"></i><span>${escapeHtml(task.title)}</span><small>${task.recurrence ? (task.recurrence.type === "daily" ? "daily" : "weekly") : (task.time ?? "")}</small></div>`,
-        )
+        .map((task) => {
+          const label = `Mark ${task.title} complete`;
+          return `<div class="widget-task-row" data-id="${task.id}"><button type="button" class="widget-task-check" data-action="toggle-task" aria-label="${escapeHtml(label)}"></button><i class="${task.priority ?? "normal"}"></i><span>${escapeHtml(task.title)}</span><small>${task.recurrence ? (task.recurrence.type === "daily" ? "daily" : "weekly") : (task.time ?? "")}</small></div>`;
+        })
         .join("")
     : "<p>Nothing left today <b>✓</b></p>";
   return `<div class="bubble-task-list">${content}</div><div class="widget-foot">${openTasks.length} open <span class="widget-quick-add" data-action="quick-add-task" role="button" tabindex="0">＋ quick add</span><span class="widget-routine-add" data-action="add-task" role="button" tabindex="0">＋ routine</span></div>`;

@@ -46,6 +46,7 @@ export interface ViewActionContext {
   setWidgetDimension: (widgetId: string, dimension: string) => void;
   hideWidget: (widgetId: string) => void;
   openWidget: (widgetId: string) => void;
+  refreshOpenWidget: () => void;
   importCalendar: () => void;
   selectDate: (date: string) => void;
   previousMonth: () => void;
@@ -209,9 +210,14 @@ export function bindViewActions(context: ViewActionContext): void {
         );
         const task = context.state.tasks.find((item) => item.id === id);
         if (action === "toggle-task" && task) {
+          event.preventDefault();
+          event.stopPropagation();
           void context
             .saveFocusDeskTask(toggleTaskOnDate(task, context.selectedDate))
-            .then(() => context.render());
+            .then(() => {
+              context.render();
+              context.refreshOpenWidget();
+            });
           return;
         }
         if (action === "delete-task" && task) {

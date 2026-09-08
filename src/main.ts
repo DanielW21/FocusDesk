@@ -558,10 +558,9 @@ function openFocus(taskId: number): void {
 }
 
 function showModal(content: string): void {
-  element<HTMLDivElement>(".modal").classList.remove(
-    "widget-full-modal",
-    "picker-modal",
-  );
+  const modal = element<HTMLDivElement>(".modal");
+  modal.classList.remove("widget-full-modal", "picker-modal");
+  delete modal.dataset.widgetId;
   element<HTMLDivElement>("#modal-content").innerHTML = content;
   element<HTMLDivElement>("#modal").classList.remove("hidden");
   document
@@ -571,10 +570,9 @@ function showModal(content: string): void {
 
 function closeModal(): void {
   element<HTMLDivElement>("#modal").classList.add("hidden");
-  element<HTMLDivElement>(".modal").classList.remove(
-    "widget-full-modal",
-    "picker-modal",
-  );
+  const modal = element<HTMLDivElement>(".modal");
+  modal.classList.remove("widget-full-modal", "picker-modal");
+  delete modal.dataset.widgetId;
   workspaceModalActions.stopTimer();
 }
 
@@ -660,6 +658,7 @@ function viewActionContext(): ViewActionContext {
       persist(true);
     },
     openWidget,
+    refreshOpenWidget: dashboardActions.refreshOpenWidget,
     importCalendar: () => element<HTMLInputElement>("#ics-input").click(),
     selectDate: (date) => {
       selectedDate = date;

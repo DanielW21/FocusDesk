@@ -14,6 +14,7 @@ import {
   renderTaskList,
   type WorkspaceViewContext,
 } from "./workspace-views";
+import { taskIsDueOnDate } from "./model";
 
 export interface DashboardActionsContext {
   state: AppState;
@@ -36,6 +37,7 @@ export interface DashboardActionsContext {
 
 export interface DashboardActions {
   openWidget: (widgetId: string) => void;
+  refreshOpenWidget: () => void;
   openWidgetPicker: () => void;
   setWidgetDimension: (widgetId: string, rawDimension: string) => void;
   toggleWidgetFromSettings: (widgetId: string) => void;
@@ -77,7 +79,9 @@ export function createDashboardActions(
     const meta = registries.widgets.require(widget.widgetId).manifest;
     const styleKey = widgetStyleKey(widget.widgetId);
     const selectedDate = getSelectedDate();
-    const tasks = state.tasks.filter((task) => task.date === selectedDate);
+    const tasks = state.tasks.filter((task) =>
+      taskIsDueOnDate(task, selectedDate),
+    );
     const actionLabels: Partial<Record<string, string>> = {
       tasks: "Open all tasks",
       schedule: "Open calendar",
@@ -87,18 +91,22 @@ export function createDashboardActions(
     const detailBody =
       styleKey === "schedule"
         ? `<div class="detail-events schedule-detail-events">${renderEventsFor(selectedDate, workspaceViewContext()) || '<div class="empty">No events on this day.</div>'}</div>`
-        : `<div class="widget-detail-body widget-${styleKey}">${renderWidgetBody(widget, dashboardViewContext(), largestDimension(meta.supportedDimensions), { ...widget.settings, taskManagerExpanded: styleKey === "task-manager" })}</div>`;
+        : styleKey === "tasks"
+          ? `<div class="detail-task-list">${renderTaskList(tasks, selectedDate)}</div>`
+          : `<div class="widget-detail-body widget-${styleKey}">${renderWidgetBody(widget, dashboardViewContext(), largestDimension(meta.supportedDimensions), { ...widget.settings, taskManagerExpanded: styleKey === "task-manager" })}</div>`;
 
     showModal(`<div class="widget-detail">
     <div class="widget-detail-head"><div class="widget-detail-icon widget-${styleKey}">${meta.icon}</div><div><div class="modal-kicker">${meta.description}</div><h2>${meta.title}</h2></div></div>
     ${detailBody}
-    ${styleKey === "tracker" || styleKey === "tasks" ? `<div class="detail-task-list">${renderTaskList(tasks, selectedDate)}</div>` : ""}
+    ${styleKey === "tracker" ? `<div class="detail-task-list">${renderTaskList(tasks, selectedDate)}</div>` : ""}
     ${styleKey === "focus" ? `<button class="primary-button detail-primary" id="detail-focus">Start a ${state.settings.focusDurationMinutes} minute session</button>` : ""}
     ${actionLabels[styleKey] ? `<button class="secondary-button detail-primary" id="detail-navigate">${actionLabels[styleKey]}</button>` : ""}
   </div>`);
     document
       .querySelector<HTMLElement>(".modal")
       ?.classList.add("widget-full-modal");
+    const modal = document.querySelector<HTMLElement>(".modal");
+    if (modal) modal.dataset.widgetId = widgetId;
     bindViewActions();
     updateClocks();
 
@@ -128,6 +136,14 @@ export function createDashboardActions(
           render();
         }
       };
+  }
+
+  function refreshOpenWidget(): void {
+    const modal = document.querySelector<HTMLElement>(
+      ".modal.widget-full-modal[data-widget-id]",
+    );
+    const widgetId = modal?.dataset.widgetId;
+    if (widgetId) openWidget(widgetId);
   }
 
   function openWidgetPicker(): void {
@@ -223,6 +239,7 @@ export function createDashboardActions(
 
   return {
     openWidget,
+    refreshOpenWidget,
     openWidgetPicker,
     setWidgetDimension,
     toggleWidgetFromSettings,

@@ -59,6 +59,10 @@
 .widget-tasks .widget-symbol { background: #db7555; }
 .bubble-task-list { display: flex; min-height: 0; flex: 1; flex-direction: column; margin-top: 12px; overflow-y: auto; }
 .bubble-task-list > div { display: flex; align-items: center; gap: 9px; min-height: 29px; border-bottom: 1px solid rgba(50,59,53,.07); font-size: 11px; }
+.bubble-task-list > .widget-task-row { cursor: default; }
+.widget-task-check { width: 16px; height: 16px; flex: none; padding: 0; border: 1px solid #b8c2bb; border-radius: 5px; background: transparent; cursor: pointer; }
+.widget-task-check:hover { border-color: #d77757; background: rgba(215,119,87,.12); }
+.widget-task-check:focus-visible { outline: 2px solid #d77757; outline-offset: 2px; }
 .bubble-task-list > div i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #aab4ad; }
 .bubble-task-list > div i.high { background: #dd7152; }
 .bubble-task-list > div i.low { background: #81aeba; }
@@ -88,6 +92,7 @@
 .widget-foot span { color: #be745d; }
 .desk-widget[data-widget-rows="1"] .bubble-task-list { margin-top: 0; }
 .desk-widget[data-widget-rows="1"] .bubble-task-list > div { min-height: 24px; font-size: 10px; }
+.desk-widget[data-widget-rows="1"] .widget-task-check { width: 13px; height: 13px; border-radius: 4px; }
 .desk-widget[data-widget-rows="1"] .bubble-task-list > div small { font-size: 8px; }
 .desk-widget[data-widget-rows="1"] .widget-foot { padding-top: 3px; font-size: 8px; }
 .integration-state { display: flex; flex: 1; flex-direction: column; justify-content: center; gap: 6px; min-height: 92px; color: #89938c; }
