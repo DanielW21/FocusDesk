@@ -723,6 +723,25 @@ kbd {
   gap: 12px;
   align-items: start;
 }
+.weekday-options {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 14px;
+}
+.form-group .weekday-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  white-space: nowrap;
+}
+.weekday-option input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+  accent-color: var(--accent);
+}
 .search-box {
   display: flex;
   align-items: center;
