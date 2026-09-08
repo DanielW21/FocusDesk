@@ -98,11 +98,15 @@ function widgetCard(
     )
     .join("");
   const surface =
-    styleKey === "links" || widget.widgetId === "waterlooworks.jobs"
+    styleKey === "links" ||
+    styleKey === "tasks" ||
+    widget.widgetId === "waterlooworks.jobs"
       ? `<div class="widget-surface" data-action="open-widget" data-widget-id="${widget.id}" role="button" tabindex="0" aria-label="Open ${meta.title}">`
       : `<button class="widget-surface" data-action="open-widget" data-widget-id="${widget.id}" aria-label="Open ${meta.title}">`;
   const surfaceEnd =
-    styleKey === "links" || widget.widgetId === "waterlooworks.jobs"
+    styleKey === "links" ||
+    styleKey === "tasks" ||
+    widget.widgetId === "waterlooworks.jobs"
       ? "</div>"
       : "</button>";
   return `<article class="desk-widget widget-${styleKey} dimension-${widget.dimension} ${context.widgetEditMode ? "editing" : ""}" data-widget-id="${widget.id}" data-widget-columns="${columns}" data-widget-rows="${rows}" style="--widget-columns:${columns};--widget-rows:${rows};" draggable="${context.widgetEditMode}">

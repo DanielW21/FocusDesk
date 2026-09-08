@@ -167,6 +167,20 @@ export function bindViewBindings(context: ViewBindingsContext): void {
     };
 
   document
+    .querySelectorAll<HTMLElement>(
+      '[data-action="quick-add-task"][role="button"], [data-action="add-task"][role="button"]',
+    )
+    .forEach(
+      (control) =>
+        (control.onkeydown = (event) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          event.preventDefault();
+          event.stopPropagation();
+          control.click();
+        }),
+    );
+
+  document
     .querySelectorAll<HTMLElement>('.desk-widget[draggable="true"]')
     .forEach((widget) => {
       widget.ondragstart = () => {

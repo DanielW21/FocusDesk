@@ -2,7 +2,12 @@ import type {
   WidgetDimension,
   WidgetRenderContext,
 } from "../../../contracts/widgets";
-import { WorkspaceWidgetDataSchema } from "../model";
+import {
+  taskIsCompletedOnDate,
+  taskIsDueOnDate,
+  taskIsOpenOnDate,
+  WorkspaceWidgetDataSchema,
+} from "../model";
 import { dimensionParts, visualRows } from "../../../widgets/widget-dimensions";
 import {
   quickLinkAccessibleLabel,
@@ -50,9 +55,19 @@ export function renderTracker(
   dimension: WidgetDimension,
 ): string {
   const data = dataFrom(context);
-  const tasks = data.tasks.filter((task) => task.date === data.selectedDate);
-  const complete = tasks.filter((task) => task.done).length;
-  const openTasks = tasks.filter((task) => !task.done);
+  const tasks = data.tasks.filter(
+    (task) =>
+      task.date === data.selectedDate ||
+      (task.recurrence !== null &&
+        task.recurrence !== undefined &&
+        taskIsDueOnDate(task, data.selectedDate)),
+  );
+  const complete = tasks.filter((task) =>
+    taskIsCompletedOnDate(task, data.selectedDate),
+  ).length;
+  const openTasks = tasks.filter(
+    (task) => !taskIsCompletedOnDate(task, data.selectedDate),
+  );
   const percent = tasks.length
     ? Math.round((complete / tasks.length) * 100)
     : 0;
@@ -75,8 +90,8 @@ export function renderTasks(
   dimension: WidgetDimension,
 ): string {
   const data = dataFrom(context);
-  const openTasks = data.tasks.filter(
-    (task) => task.date === data.selectedDate && !task.done,
+  const openTasks = data.tasks.filter((task) =>
+    taskIsOpenOnDate(task, data.selectedDate),
   );
   const content = openTasks.length
     ? openTasks
@@ -90,11 +105,11 @@ export function renderTasks(
         )
         .map(
           (task) =>
-            `<div><i class="${task.priority ?? "normal"}"></i><span>${escapeHtml(task.title)}</span><small>${task.time ?? ""}</small></div>`,
+            `<div><i class="${task.priority ?? "normal"}"></i><span>${escapeHtml(task.title)}</span><small>${task.recurrence ? (task.recurrence.type === "daily" ? "daily" : "weekly") : (task.time ?? "")}</small></div>`,
         )
         .join("")
     : "<p>Nothing left today <b>✓</b></p>";
-  return `<div class="bubble-task-list">${content}</div><div class="widget-foot">${openTasks.length} open <span>＋ quick add</span></div>`;
+  return `<div class="bubble-task-list">${content}</div><div class="widget-foot">${openTasks.length} open <span class="widget-quick-add" data-action="quick-add-task" role="button" tabindex="0">＋ quick add</span><span class="widget-routine-add" data-action="add-task" role="button" tabindex="0">＋ routine</span></div>`;
 }
 
 export function renderSchedule(
@@ -125,8 +140,8 @@ export function renderSchedule(
 
 export function renderFocus(context: WidgetRenderContext): string {
   const data = dataFrom(context);
-  const nextTask = data.tasks.find(
-    (task) => task.date === data.selectedDate && !task.done,
+  const nextTask = data.tasks.find((task) =>
+    taskIsOpenOnDate(task, data.selectedDate),
   );
   const duration = data.focusDurationMinutes ?? 25;
   return `<div class="bubble-focus"><div class="focus-play">▶</div><div><strong>${duration}:00</strong><span>${nextTask ? escapeHtml(nextTask.title) : "Choose a task"}</span></div></div>`;

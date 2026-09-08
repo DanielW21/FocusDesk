@@ -18,7 +18,11 @@ import { createNativeWorkspaceClient } from "./features/workspace/native-workspa
 import { createWorkspaceController } from "./features/workspace/controller";
 import { createDashboardActions } from "./features/workspace/dashboard-actions";
 import { createWorkspaceModalActions } from "./features/workspace/modal-actions";
-import type { CalendarEvent, Task } from "./features/workspace/model";
+import {
+  taskIsOpenOnDate,
+  type CalendarEvent,
+  type Task,
+} from "./features/workspace/model";
 import {
   isNativeBridgeAvailable,
   openNativeLink,
@@ -30,7 +34,10 @@ import {
 import { renderTaskManagerView } from "./features/tasks/task-manager-view";
 import { createTaskManagerActions } from "./features/tasks/task-manager-actions";
 import type { TaskManagerStatus } from "./features/tasks/model";
-import { openEditor as openWorkspaceEditor } from "./features/workspace/editor";
+import {
+  openEditor as openWorkspaceEditor,
+  openQuickTask as openWorkspaceQuickTask,
+} from "./features/workspace/editor";
 import { WidgetLayoutStore } from "./widgets/widget-layout-store";
 import {
   DEFAULT_FOCUSDESK_SETTINGS,
@@ -112,6 +119,8 @@ const starterState: AppState = {
       date: localDate(now),
       time: "09:00",
       priority: "high",
+      recurrence: null,
+      completedDates: [],
     },
     {
       id: 2,
@@ -121,6 +130,8 @@ const starterState: AppState = {
       date: localDate(now),
       time: "10:00",
       priority: "normal",
+      recurrence: null,
+      completedDates: [],
     },
   ],
   events: [],
@@ -319,8 +330,7 @@ function render(): void {
       button.classList.toggle("active", button.dataset.view === view),
     );
   element<HTMLElement>("#today-count").textContent = String(
-    state.tasks.filter((task) => !task.done && task.date === localDate(now))
-      .length,
+    state.tasks.filter((task) => taskIsOpenOnDate(task, localDate(now))).length,
   );
 
   const views: Record<View, () => string> = {
@@ -507,6 +517,7 @@ function openEditor(
       selectedDate,
       googleCalendarMessage:
         workspaceController.googleCalendar.getState().message,
+      getFocusDeskTaskStorageMessage: workspaceController.getTaskStorageMessage,
       showModal,
       closeModal,
       render,
@@ -518,6 +529,24 @@ function openEditor(
     type,
     editId,
   );
+}
+
+function openQuickTask(): void {
+  openWorkspaceQuickTask({
+    state,
+    now,
+    selectedDate,
+    googleCalendarMessage:
+      workspaceController.googleCalendar.getState().message,
+    getFocusDeskTaskStorageMessage: workspaceController.getTaskStorageMessage,
+    showModal,
+    closeModal,
+    render,
+    persist: () => persist(),
+    saveCalendarEvent: workspaceController.saveCalendarEvent,
+    deleteCalendarEvent: workspaceController.deleteCalendarEvent,
+    saveFocusDeskTask: workspaceController.saveTask,
+  });
 }
 
 function openSearch(): void {
@@ -576,6 +605,7 @@ function runTaskManagerMutation(
 function viewActionContext(): ViewActionContext {
   return {
     state,
+    selectedDate,
     render,
     setTaskManagerStatusMenuId: (id) => {
       taskManagerStatusMenuId = id;
@@ -599,6 +629,7 @@ function viewActionContext(): ViewActionContext {
       void workspaceController.googleCalendar.disconnect(),
     setGoogleCalendarSelection: workspaceController.googleCalendar.setSelection,
     openEditor,
+    openQuickTask,
     openNativeLink,
     runTaskManagerMutation,
     setTaskManagerStatus: (id: string, status: TaskManagerStatus) =>
@@ -684,6 +715,8 @@ function bindViewActions(): void {
         tag: "Inbox",
         date,
         priority: "normal",
+        recurrence: null,
+        completedDates: [],
       };
       void workspaceController.saveTask(task).then(() => render());
     },

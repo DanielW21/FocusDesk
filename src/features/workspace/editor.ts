@@ -2,7 +2,13 @@ import type { AppState } from "../../app/app-state";
 import { element } from "../../ui/dom";
 import { escapeHtml, localDate } from "../../ui/formatters";
 import { DEFAULT_QUICK_LINK_COLOR } from "./quick-links";
-import type { CalendarEvent, Priority, QuickLink, Task } from "./model";
+import type {
+  CalendarEvent,
+  Priority,
+  QuickLink,
+  Task,
+  TaskRecurrence,
+} from "./model";
 
 export type EditorType = "task" | "note" | "link" | "event";
 
@@ -11,6 +17,7 @@ export interface EditorContext {
   now: Date;
   selectedDate: string;
   googleCalendarMessage: string;
+  getFocusDeskTaskStorageMessage?: () => string;
   showModal: (content: string) => void;
   closeModal: () => void;
   render: () => void;
@@ -20,6 +27,16 @@ export interface EditorContext {
   saveFocusDeskTask: (task: Task) => Promise<boolean>;
 }
 
+const WEEKDAYS = [
+  [0, "Sun"],
+  [1, "Mon"],
+  [2, "Tue"],
+  [3, "Wed"],
+  [4, "Thu"],
+  [5, "Fri"],
+  [6, "Sat"],
+] as const;
+
 function readImageFile(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -28,6 +45,76 @@ function readImageFile(file: File): Promise<string> {
       reject(reader.error ?? new Error("Unable to read image"));
     reader.readAsDataURL(file);
   });
+}
+
+function taskSaveError(context: EditorContext): string {
+  return (
+    context.getFocusDeskTaskStorageMessage?.() ||
+    "FocusDesk could not save this task. Your changes were not closed."
+  );
+}
+
+function renderTaskForm(task: Task | undefined, selectedDate: string): string {
+  const recurrence = task?.recurrence;
+  const weekdays = recurrence?.weekdays ?? [];
+  const recurrenceStart = recurrence?.start ?? task?.date ?? selectedDate;
+  const recurrenceEnd = recurrence?.end ?? "";
+  const taskKind = recurrence ? "recurring" : "one-time";
+  const dateFields = task
+    ? `<div class="form-row"><div class="form-group"><label>Date</label><input class="text-input" id="f-date" type="date" value="${escapeHtml(task.date)}"></div><div class="form-group"><label>Time</label><input class="text-input" id="f-time" type="time" value="${escapeHtml(task.time ?? "")}"></div></div>`
+    : "";
+  const categoryFields = task
+    ? `<div class="form-row"><div class="form-group"><label>Category</label><input class="text-input" id="f-tag" value="${escapeHtml(task.tag ?? "")}" placeholder="Work, personal…"></div><div class="form-group"><label>Priority</label><select class="select-input" id="f-priority"><option value="normal" ${task.priority === "normal" || !task.priority ? "selected" : ""}>Normal</option><option value="high" ${task.priority === "high" ? "selected" : ""}>High</option><option value="low" ${task.priority === "low" ? "selected" : ""}>Low</option></select></div></div>`
+    : '<p class="form-hint">One-time tasks stay in the task list until you complete them.</p>';
+  const weekdayFields = WEEKDAYS.map(
+    ([value, label]) =>
+      `<label class="weekday-option"><input type="checkbox" data-recurrence-weekday="${value}" ${weekdays.includes(value) ? "checked" : ""}>${label}</label>`,
+  ).join("");
+
+  return `<div class="form-group"><label>Task</label><input class="text-input" id="f-title" value="${escapeHtml(task?.title ?? "")}" placeholder="What needs doing?" autocomplete="off"></div><div class="form-group"><label>Task type</label><select class="select-input" id="f-task-kind"><option value="one-time" ${taskKind === "one-time" ? "selected" : ""}>One-time checklist item</option><option value="recurring" ${taskKind === "recurring" ? "selected" : ""}>Recurring routine</option></select></div><div id="task-recurring-options" class="${recurrence ? "" : "hidden"}"><div class="form-row"><div class="form-group"><label>Repeat</label><select class="select-input" id="f-recurrence-type"><option value="daily" ${recurrence?.type === "daily" ? "selected" : ""}>Every day</option><option value="weekly" ${recurrence?.type === "weekly" ? "selected" : ""}>Selected weekdays</option></select></div><div class="form-group"><label>Start date</label><input class="text-input" id="f-recurrence-start" type="date" value="${escapeHtml(recurrenceStart)}"></div></div><div id="weekly-days" class="form-group ${recurrence?.type === "weekly" ? "" : "hidden"}"><label>Weekdays</label><div class="weekday-options">${weekdayFields}</div></div><div class="form-group"><label>End date <span class="label-note">optional</span></label><input class="text-input" id="f-recurrence-end" type="date" value="${escapeHtml(recurrenceEnd)}"></div><p class="form-hint">Recurring routines stay out of the calendar and are completed one occurrence at a time.</p></div><div id="task-one-time-options" class="${recurrence ? "hidden" : ""}">${dateFields}${categoryFields}</div><p class="form-error" id="task-form-error" role="alert"></p>`;
+}
+
+export function openQuickTask(context: EditorContext): void {
+  context.showModal(
+    '<div class="modal-kicker">QUICK ADD</div><h2>New task</h2><div class="form-group"><label>Task</label><input class="text-input" id="quick-task-modal" placeholder="What needs doing?" autocomplete="off"></div><p class="form-hint">One-time task · stays open until complete</p><p class="form-error" id="quick-task-error" role="alert"></p><div class="modal-footer"><button type="button" class="secondary-button" data-modal-close>Cancel</button><button type="button" class="primary-button" id="quick-task-save">Add task</button></div>',
+  );
+  const input = element<HTMLInputElement>("#quick-task-modal");
+  const saveButton = element<HTMLButtonElement>("#quick-task-save");
+  const error = element<HTMLElement>("#quick-task-error");
+  const save = async (): Promise<void> => {
+    const title = input.value.trim();
+    if (!title) {
+      error.textContent = "Enter a task first.";
+      input.focus();
+      return;
+    }
+    saveButton.disabled = true;
+    const saved = await context.saveFocusDeskTask({
+      id: Date.now(),
+      title,
+      done: false,
+      tag: "Inbox",
+      date: context.selectedDate,
+      priority: "normal",
+      recurrence: null,
+      completedDates: [],
+    });
+    if (!saved) {
+      saveButton.disabled = false;
+      error.textContent = taskSaveError(context);
+      return;
+    }
+    context.closeModal();
+    context.render();
+  };
+  saveButton.onclick = () => void save();
+  input.onkeydown = (event) => {
+    if (event.key === "Enter") {
+      event.preventDefault();
+      void save();
+    }
+  };
+  input.focus();
 }
 
 export function openEditor(
@@ -49,10 +136,7 @@ export function openEditor(
       ? state.events.find((item) => item.id === editId)
       : undefined;
   const forms = {
-    task: [
-      "Task",
-      `<div class="form-group"><label>What needs doing?</label><input class="text-input" id="f-title" value="${escapeHtml(task?.title ?? "")}" placeholder="e.g. Draft project outline"></div><div class="form-row"><div class="form-group"><label>Date</label><input class="text-input" id="f-date" type="date" value="${task?.date ?? selectedDate}"></div><div class="form-group"><label>Time</label><input class="text-input" id="f-time" type="time" value="${task?.time ?? ""}"></div></div><div class="form-row"><div class="form-group"><label>Category</label><input class="text-input" id="f-tag" value="${escapeHtml(task?.tag ?? "")}" placeholder="Work, personal…"></div><div class="form-group"><label>Priority</label><select class="select-input" id="f-priority"><option value="normal">Normal</option><option value="high" ${task?.priority === "high" ? "selected" : ""}>High</option><option value="low" ${task?.priority === "low" ? "selected" : ""}>Low</option></select></div></div>`,
-    ],
+    task: ["Task", renderTaskForm(task, selectedDate)],
     note: [
       "Scratch note",
       '<div class="form-group"><label>Title</label><input class="text-input" id="f-title" placeholder="A thought worth keeping"></div><div class="form-group"><label>Note</label><textarea class="note-textarea" id="f-body" rows="7" placeholder="Write freely…"></textarea></div>',
@@ -68,9 +152,31 @@ export function openEditor(
   }[type];
 
   context.showModal(
-    `<div class="modal-kicker">${editId ? "EDIT" : "NEW"}</div><h2>${forms[0]}</h2>${forms[1]}${type === "event" && event ? '<small class="form-hint calendar-delete-error" id="calendar-delete-error" role="alert"></small>' : ""}<div class="modal-footer">${type === "event" && event ? '<button class="danger-button" id="delete-calendar-event">Delete event</button>' : ""}<span class="modal-footer-spacer"></span><button class="secondary-button" data-modal-close>Cancel</button><button class="primary-button" id="save-modal">${editId ? "Save changes" : "Add to FocusDesk"}</button></div>`,
+    `<div class="modal-kicker">${editId ? "EDIT" : "NEW"}</div><h2>${forms[0]}</h2>${forms[1]}${type === "event" && event ? '<small class="form-hint calendar-delete-error" id="calendar-delete-error" role="alert"></small>' : ""}<div class="modal-footer">${type === "event" && event ? '<button type="button" class="danger-button" id="delete-calendar-event">Delete event</button>' : ""}<span class="modal-footer-spacer"></span><button type="button" class="secondary-button" data-modal-close>Cancel</button><button type="button" class="primary-button" id="save-modal">${editId ? "Save changes" : "Add task"}</button></div>`,
   );
-  element<HTMLInputElement>("#f-title").focus();
+
+  document.querySelector<HTMLInputElement>("#f-title")?.focus();
+
+  if (type === "task") {
+    const kind = element<HTMLSelectElement>("#f-task-kind");
+    const recurringOptions = element<HTMLElement>("#task-recurring-options");
+    const oneTimeOptions = element<HTMLElement>("#task-one-time-options");
+    const repeatType = element<HTMLSelectElement>("#f-recurrence-type");
+    const weeklyDays = element<HTMLElement>("#weekly-days");
+    const updateTaskForm = (): void => {
+      const recurring = kind.value === "recurring";
+      recurringOptions.classList.toggle("hidden", !recurring);
+      oneTimeOptions.classList.toggle("hidden", recurring);
+      weeklyDays.classList.toggle(
+        "hidden",
+        !recurring || repeatType.value !== "weekly",
+      );
+    };
+    kind.onchange = updateTaskForm;
+    repeatType.onchange = updateTaskForm;
+    updateTaskForm();
+  }
+
   if (type === "event" && event) {
     element<HTMLButtonElement>("#delete-calendar-event").onclick = async () => {
       const deleteButton = element<HTMLButtonElement>("#delete-calendar-event");
@@ -100,23 +206,81 @@ export function openEditor(
         "FocusDesk could not delete this event.";
     };
   }
+
   element<HTMLButtonElement>("#save-modal").onclick = async () => {
     const title = element<HTMLInputElement>("#f-title").value.trim();
-    if (!title) return;
+    if (!title) {
+      const error = document.querySelector<HTMLElement>("#task-form-error");
+      if (error) error.textContent = "Enter a task first.";
+      return;
+    }
     if (type === "task") {
+      const kind = element<HTMLSelectElement>("#f-task-kind").value;
+      let recurrence: TaskRecurrence | null = null;
+      let date = selectedDate;
+      let time: string | undefined;
+      let tag = "Inbox";
+      let priority: Priority = "normal";
+      if (kind === "recurring") {
+        const recurrenceType = element<HTMLSelectElement>("#f-recurrence-type")
+          .value as TaskRecurrence["type"];
+        const start = element<HTMLInputElement>("#f-recurrence-start").value;
+        const end = element<HTMLInputElement>("#f-recurrence-end").value;
+        const weekdays = Array.from(
+          document.querySelectorAll<HTMLInputElement>(
+            "[data-recurrence-weekday]:checked",
+          ),
+        ).map((input) => Number(input.dataset.recurrenceWeekday));
+        const error = element<HTMLElement>("#task-form-error");
+        if (!start) {
+          error.textContent = "Choose a start date for this routine.";
+          return;
+        }
+        if (recurrenceType === "weekly" && weekdays.length === 0) {
+          error.textContent = "Choose at least one weekday.";
+          return;
+        }
+        if (end && end < start) {
+          error.textContent =
+            "The end date must be on or after the start date.";
+          return;
+        }
+        recurrence = {
+          type: recurrenceType,
+          weekdays: recurrenceType === "daily" ? [] : weekdays,
+          start,
+          end: end || null,
+        };
+        date = start;
+      } else if (task) {
+        date = element<HTMLInputElement>("#f-date").value || selectedDate;
+        time = element<HTMLInputElement>("#f-time").value || undefined;
+        tag = element<HTMLInputElement>("#f-tag").value.trim() || "Inbox";
+        priority = element<HTMLSelectElement>("#f-priority").value as Priority;
+      }
       const value: Task = {
         id: task?.id ?? Date.now(),
         title,
-        done: task?.done ?? false,
-        date: element<HTMLInputElement>("#f-date").value || selectedDate,
-        time: element<HTMLInputElement>("#f-time").value,
-        tag: element<HTMLInputElement>("#f-tag").value || "Task",
-        priority: element<HTMLSelectElement>("#f-priority").value as Priority,
+        done: recurrence ? false : (task?.done ?? false),
+        date,
+        time,
+        tag,
+        priority,
+        recurrence,
+        completedDates: task?.completedDates ?? [],
       };
-      if (!(await context.saveFocusDeskTask(value))) {
-        context.render();
+      const saveButton = element<HTMLButtonElement>("#save-modal");
+      saveButton.disabled = true;
+      const saved = await context.saveFocusDeskTask(value);
+      if (!saved) {
+        saveButton.disabled = false;
+        element<HTMLElement>("#task-form-error").textContent =
+          taskSaveError(context);
         return;
       }
+      context.closeModal();
+      context.render();
+      return;
     }
     if (type === "note")
       state.notes.push({
@@ -160,7 +324,6 @@ export function openEditor(
       await context.saveCalendarEvent(value);
     }
     context.closeModal();
-    if (type !== "task" && type !== "event") context.persist();
-    else context.render();
+    context.persist();
   };
 }

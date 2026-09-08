@@ -1,5 +1,5 @@
 import type { AppState } from "./app-state";
-import type { Task } from "../features/workspace/model";
+import { toggleTaskOnDate, type Task } from "../features/workspace/model";
 import type { FocusDeskSettings } from "../settings";
 import {
   TaskManagerStatusSchema,
@@ -10,6 +10,7 @@ type TaskManagerMutation = "tasks.complete" | "tasks.reopen" | "tasks.delete";
 
 export interface ViewActionContext {
   state: AppState;
+  selectedDate: string;
   render: () => void;
   setTaskManagerStatusMenuId: (id: string | undefined) => void;
   getTaskManagerStatusMenuId: () => string | undefined;
@@ -27,6 +28,7 @@ export interface ViewActionContext {
   disconnectGoogleCalendar: () => void;
   setGoogleCalendarSelection: (calendarId: string, selected: boolean) => void;
   openEditor: (type: "task" | "note" | "link" | "event", id?: number) => void;
+  openQuickTask: () => void;
   openNativeLink: (url: string) => void;
   runTaskManagerMutation: (
     action: TaskManagerMutation,
@@ -57,8 +59,15 @@ export function bindViewActions(context: ViewActionContext): void {
   document.querySelectorAll<HTMLElement>("[data-action]:not(select)").forEach(
     (control) =>
       (control.onclick = (event) => {
+        if (control.tagName === "BUTTON") event.preventDefault();
         if ((event.target as Element).closest("[data-ww-widget]")) return;
         const action = control.dataset.action;
+        if (action === "quick-add-task") {
+          event.preventDefault();
+          event.stopPropagation();
+          context.openQuickTask();
+          return;
+        }
         if (action === "taskmanager-refresh") {
           context.refreshTaskManager();
           return;
@@ -201,13 +210,18 @@ export function bindViewActions(context: ViewActionContext): void {
         const task = context.state.tasks.find((item) => item.id === id);
         if (action === "toggle-task" && task) {
           void context
-            .saveFocusDeskTask({ ...task, done: !task.done })
+            .saveFocusDeskTask(toggleTaskOnDate(task, context.selectedDate))
             .then(() => context.render());
+          return;
         }
         if (action === "delete-task" && task) {
           void context.deleteFocusDeskTask(id).then(() => context.render());
+          return;
         }
-        if (action === "edit-task" && task) context.openEditor("task", id);
+        if (action === "edit-task" && task) {
+          context.openEditor("task", id);
+          return;
+        }
         if (action === "edit-link") {
           event.preventDefault();
           event.stopPropagation();
@@ -230,7 +244,14 @@ export function bindViewActions(context: ViewActionContext): void {
           );
           context.persist();
         }
-        if (action === "add-task") context.openEditor("task");
+        if (action === "add-task") {
+          if (control.getAttribute("role") === "button") {
+            event.preventDefault();
+            event.stopPropagation();
+          }
+          context.openEditor("task");
+          return;
+        }
         if (action === "add-note") context.openEditor("note");
         if (action === "add-link") context.openEditor("link");
         if (action === "open-search") context.openSearch();
