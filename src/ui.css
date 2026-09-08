@@ -1,4 +1,5 @@
 :root {
+  --form-control-height: 40px;
   --shadow-sm:
     0 1px 2px rgba(22, 35, 27, 0.03), 0 5px 18px rgba(22, 35, 27, 0.035);
   --shadow-md: 0 18px 60px rgba(22, 35, 27, 0.14);
@@ -17,6 +18,43 @@ select {
 }
 button {
   -webkit-app-region: no-drag;
+}
+
+/* Keep regular form controls consistent across modals, settings, and feature pages.
+   Compact widget-size selectors intentionally keep their own dimensions below. */
+.text-input,
+.select-input,
+.note-textarea,
+.settings-field input,
+.settings-field select {
+  box-sizing: border-box;
+  min-width: 0;
+  line-height: 1.25;
+}
+
+.text-input,
+.select-input,
+.settings-field input,
+.settings-field select {
+  height: var(--form-control-height);
+}
+
+.note-textarea {
+  min-height: var(--form-control-height);
+}
+
+.text-input:focus,
+.select-input:focus,
+.note-textarea:focus {
+  border-color: #a8b9ac;
+  box-shadow: 0 0 0 3px #71927b13;
+}
+
+.select-input,
+.settings-field select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0 36px 0 12px;
 }
 
 html,
@@ -673,6 +711,7 @@ kbd {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 12px;
+  align-items: start;
 }
 .search-box {
   display: flex;
@@ -1268,13 +1307,16 @@ html[data-accent="gold"] {
 .settings-dimension select {
   width: 100%;
   min-height: 35px;
-  padding: 0 10px;
+  padding: 0 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--ink);
   background: var(--surface-subtle);
   font-size: 11px;
   cursor: pointer;
+}
+.settings-field select {
+  padding-right: 36px;
 }
 .settings-field select:focus,
 .settings-field input:focus,
@@ -1700,4 +1742,18 @@ html[data-theme="dark"] .settings-tool-info small {
     width: 100%;
     justify-content: space-between;
   }
+}
+
+/* Reapply the shared arrow after theme/settings background shorthands. */
+.select-input,
+.settings-field select {
+  padding: 0 36px 0 12px;
+  background-repeat: no-repeat;
+  background-position:
+    calc(100% - 16px) 50%,
+    calc(100% - 11px) 50%;
+  background-size: 5px 5px;
+  background-image:
+    linear-gradient(45deg, transparent 50%, #87928a 50%),
+    linear-gradient(135deg, #87928a 50%, transparent 50%);
 }

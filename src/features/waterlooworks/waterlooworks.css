@@ -49,7 +49,8 @@
 .ww-rich-fields dd { margin: 5px 0 8px 12px; }
 .ww-filters { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; align-items: end; margin: 12px 0; }
 .ww-page label { color: var(--muted, #76817a); font-size: 11px; }
-.ww-page input:not([type="checkbox"]), .ww-page select { display: block; width: 100%; border: 1px solid var(--line, #e7eae6); border-radius: 7px; background: white; color: var(--ink, #1e2723); padding: 9px; margin-top: 5px; font: 12px 'DM Sans', sans-serif; min-width: 0; }
+.ww-page input:not([type="checkbox"]), .ww-page select { display: block; width: 100%; height: var(--form-control-height, 40px); box-sizing: border-box; border: 1px solid var(--line, #e7eae6); border-radius: 7px; background: white; color: var(--ink, #1e2723); padding: 0 12px; margin-top: 5px; font: 12px 'DM Sans', sans-serif; line-height: 1.25; min-width: 0; }
+.ww-page select { appearance: none; -webkit-appearance: none; padding-right: 36px; background-repeat: no-repeat; background-position: calc(100% - 16px) 50%, calc(100% - 11px) 50%; background-size: 5px 5px; background-image: linear-gradient(45deg, transparent 50%, #87928a 50%), linear-gradient(135deg, #87928a 50%, transparent 50%); }
 .ww-page input[type="checkbox"] { accent-color: var(--accent, #d96f4e); vertical-align: middle; }
 .ww-list { display: grid; gap: 7px; }
 .ww-page .ww-job-row { display: grid; width: 100%; grid-template-columns: minmax(160px, 2.2fr) .65fr 1fr .75fr 1fr; text-align: left; align-items: center; gap: 12px; padding: 14px; }
