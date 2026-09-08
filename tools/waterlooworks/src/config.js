@@ -23,6 +23,42 @@ function localEnvironment(directory, env = process.env) {
   }
   return { ...values, ...env };
 }
+function puppeteerCacheDirectory(env = process.env) {
+  if (env.PUPPETEER_CACHE_DIR) return env.PUPPETEER_CACHE_DIR;
+  if (process.platform === "win32") {
+    return path.join(env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"), "puppeteer");
+  }
+  return path.join(os.homedir(), ".cache", "puppeteer");
+}
+function isPuppeteerBrowserExecutable(candidate) {
+  const basename = path.basename(candidate);
+  if (process.platform === "darwin") return basename === "Google Chrome for Testing";
+  if (process.platform === "win32") return basename === "chrome.exe";
+  return basename === "chrome";
+}
+function findPuppeteerExecutable(cacheDirectory, depth = 0) {
+  if (!cacheDirectory || depth > 8) return undefined;
+  let entries;
+  try {
+    entries = fs.readdirSync(cacheDirectory, { withFileTypes: true })
+      .sort((left, right) => right.name.localeCompare(left.name));
+  } catch {
+    return undefined;
+  }
+  for (const entry of entries) {
+    const candidate = path.join(cacheDirectory, entry.name);
+    if (entry.isFile() && isPuppeteerBrowserExecutable(candidate)) {
+      try {
+        if (fs.accessSync(candidate, fs.constants.X_OK) === undefined) return candidate;
+      } catch { /* Keep looking through the cache. */ }
+    }
+    if (entry.isDirectory()) {
+      const executable = findPuppeteerExecutable(candidate, depth + 1);
+      if (executable) return executable;
+    }
+  }
+  return undefined;
+}
 function loadGradeConfig(options = {}) {
   const directory = configDirectory(options);
   const env = localEnvironment(directory, options.env);
@@ -55,16 +91,17 @@ function loadScrapeConfig(options = {}) {
   const candidates = [env.PUPPETEER_EXECUTABLE_PATH,
     "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
     path.join(os.homedir(), "Applications/Google Chrome.app/Contents/MacOS/Google Chrome"),
-    "/Applications/Chromium.app/Contents/MacOS/Chromium", "/usr/bin/google-chrome", "/usr/bin/chromium"];
+    "/Applications/Chromium.app/Contents/MacOS/Chromium", "/usr/bin/google-chrome", "/usr/bin/chromium",
+    findPuppeteerExecutable(path.join(puppeteerCacheDirectory(env), "chrome"))];
   const executablePath = candidates.find(candidate => {
     if (!candidate) return false;
     try { fs.accessSync(candidate, fs.constants.X_OK); return fs.statSync(candidate).isFile(); } catch { return false; }
   });
-  if (!executablePath) throw configurationError(`Chrome unavailable. Set PUPPETEER_EXECUTABLE_PATH in ${directory}/.env.local.`);
+  if (!executablePath) throw configurationError(`Chrome unavailable. Install Google Chrome or Chromium, or set PUPPETEER_EXECUTABLE_PATH in ${directory}/.env.local.`);
   return { directory, executablePath };
 }
 function availability(loader) {
   try { loader(); return { available: true }; }
   catch (error) { return { available: false, code: "CONFIGURATION_UNAVAILABLE", reason: error.code === "CONFIGURATION_UNAVAILABLE" ? error.message : "Local configuration could not be read." }; }
 }
-module.exports = { hash, configDirectory, configurationError, loadGradeConfig, loadScrapeConfig, availability };
+module.exports = { hash, configDirectory, configurationError, findPuppeteerExecutable, loadGradeConfig, loadScrapeConfig, availability, puppeteerCacheDirectory };

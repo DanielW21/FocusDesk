@@ -65,6 +65,20 @@
 .bubble-task-list > div span { overflow: hidden; flex: 1; white-space: nowrap; text-overflow: ellipsis; }
 .bubble-task-list > div small { color: #a0a9a2; font: 9px 'DM Mono',monospace; }
 .bubble-task-list > .task-manager-widget-task { flex: 1 0 29px; }
+.task-manager-widget-weeks { display: flex; min-height: 0; flex: 1; flex-direction: column; gap: 8px; overflow-y: auto; }
+.task-manager-widget-week { flex: none; }
+.task-manager-widget-week + .task-manager-widget-week { padding-top: 7px; border-top: 1px solid rgba(50,59,53,.08); }
+.task-manager-widget-week > header { display: flex; align-items: end; justify-content: space-between; gap: 10px; padding-bottom: 4px; }
+.task-manager-widget-week > header div { display: grid; gap: 2px; }
+.task-manager-widget-week > header span { color: #a16d59; font: 9px 'DM Mono',monospace; letter-spacing: .08em; text-transform: uppercase; }
+.task-manager-widget-week > header strong { color: #536259; font-size: 12px; }
+.task-manager-widget-week > header b { color: #87938b; font: 9px 'DM Mono',monospace; }
+.task-manager-widget-week .task-manager-widget-task { display: flex; align-items: center; gap: 9px; min-height: 29px; border-bottom: 1px solid rgba(50,59,53,.07); font-size: 11px; }
+.task-manager-widget-week .task-manager-widget-task i { width: 6px; height: 6px; flex: none; border-radius: 50%; background: #aab4ad; }
+.task-manager-widget-week .task-manager-widget-task i.high { background: #dd7152; }
+.task-manager-widget-week .task-manager-widget-task i.low { background: #81aeba; }
+.task-manager-widget-week .task-manager-widget-task span { overflow: hidden; flex: 1; white-space: nowrap; text-overflow: ellipsis; }
+.task-manager-widget-week .task-manager-widget-task small { color: #a0a9a2; font: 9px 'DM Mono',monospace; }
 .bubble-task-list p { color: #89938c; font-size: 12px; }
 .bubble-task-list > .task-manager-week-empty { min-height: 42px; border-bottom: 0; color: #89938c; }
 .bubble-task-list > .task-manager-week-empty strong { font-size: 12px; font-weight: 500; }

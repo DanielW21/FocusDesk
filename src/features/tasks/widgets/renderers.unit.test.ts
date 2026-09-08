@@ -3,6 +3,71 @@ import { describe, expect, it } from "vitest";
 import { renderTaskManager } from "./renderers";
 
 describe("TaskManager widget renderer", () => {
+  it("uses grouped weekly sections in the wide layout", () => {
+    const html = renderTaskManager(
+      {
+        data: {
+          taskManager: {
+            status: "ready",
+            tasks: [
+              {
+                id: "task-1",
+                courseCode: "BME 362",
+                title: "This week",
+                done: false,
+                date: "2099-09-09",
+                priority: "normal",
+              },
+              {
+                id: "task-2",
+                courseCode: "BME 384",
+                title: "Next week",
+                done: false,
+                date: "2099-09-16",
+                priority: "normal",
+              },
+            ],
+          },
+        },
+        settings: {},
+      },
+      "4x3",
+    );
+
+    expect(html).toContain("task-manager-widget-weeks");
+    expect(html).toContain("This week");
+    expect(html).toContain("Next week");
+    expect(html).toContain("Up next");
+    expect(html).toContain("Week");
+  });
+
+  it("keeps the compact list in smaller layouts", () => {
+    const html = renderTaskManager(
+      {
+        data: {
+          taskManager: {
+            status: "ready",
+            tasks: [
+              {
+                id: "task-1",
+                courseCode: "BME 362",
+                title: "Compact task",
+                done: false,
+                date: "2099-09-09",
+                priority: "normal",
+              },
+            ],
+          },
+        },
+        settings: {},
+      },
+      "2x2",
+    );
+
+    expect(html).not.toContain("task-manager-widget-weeks");
+    expect(html).toContain("Compact task");
+  });
+
   it("shows course codes and omits midnight times", () => {
     const today = new Date();
     const date = new Date(

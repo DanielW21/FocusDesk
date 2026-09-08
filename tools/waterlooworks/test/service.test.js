@@ -33,7 +33,7 @@ async function fixture(t, dependencies = {}) {
 }
 
 test("serves authenticated SQLite-backed capabilities and jobs", async (t) => {
-  const { request } = await fixture(t);
+  const { request } = await fixture(t, { loaders: { scrape: () => { throw new Error("browser intentionally unavailable in this test"); } } });
   assert.equal((await request("/api/v1/health")).status, 200);
   const capabilities = await (await request("/api/v1/capabilities")).json();
   assert.equal(capabilities.storage.available, true);

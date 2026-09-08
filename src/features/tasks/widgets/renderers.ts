@@ -1,7 +1,13 @@
 import { z } from "zod";
 
-import type { WidgetRenderContext } from "../../../contracts/widgets";
-import { TaskManagerWidgetTaskSchema } from "../model";
+import type {
+  WidgetDimension,
+  WidgetRenderContext,
+} from "../../../contracts/widgets";
+import {
+  TaskManagerWidgetTaskSchema,
+  type TaskManagerWidgetTask,
+} from "../model";
 
 const TaskManagerWidgetDataSchema = z.object({
   taskManager: z.object({
@@ -92,7 +98,62 @@ function isUpcoming(date: string): boolean {
   return date > localDateString(lastDay);
 }
 
-export function renderTaskManager(context: WidgetRenderContext): string {
+function weekStartFor(date: string): string | undefined {
+  if (!date) return undefined;
+  const parsed = new Date(`${date}T12:00:00`);
+  if (Number.isNaN(parsed.getTime())) return undefined;
+  parsed.setDate(parsed.getDate() - parsed.getDay());
+  return localDateString(parsed);
+}
+
+function formatWeekRange(weekStart: string): string {
+  const start = new Date(`${weekStart}T12:00:00`);
+  const end = new Date(start);
+  end.setDate(start.getDate() + 6);
+  const formatter = new Intl.DateTimeFormat("en", {
+    month: "short",
+    day: "numeric",
+  });
+  return `${formatter.format(start)} – ${formatter.format(end)}`;
+}
+
+function renderWeeklyTaskManager(
+  tasks: readonly TaskManagerWidgetTask[],
+  renderTask: (task: TaskManagerWidgetTask) => string,
+): string {
+  const weeks = new Map<string, TaskManagerWidgetTask[]>();
+  const unscheduled: TaskManagerWidgetTask[] = [];
+  for (const task of tasks) {
+    const weekStart = weekStartFor(task.date);
+    if (!weekStart) {
+      unscheduled.push(task);
+      continue;
+    }
+    const weekTasks = weeks.get(weekStart) ?? [];
+    weekTasks.push(task);
+    weeks.set(weekStart, weekTasks);
+  }
+
+  const sections = [...weeks.entries()]
+    .sort(([left], [right]) => left.localeCompare(right))
+    .map(
+      ([weekStart, weekTasks], index) =>
+        `<section class="task-manager-widget-week"><header><div><span>${index === 0 ? "Up next" : "Week"}</span><strong>${formatWeekRange(weekStart)}</strong></div><b>${weekTasks.length} ${weekTasks.length === 1 ? "todo" : "todos"}</b></header>${weekTasks.map(renderTask).join("")}</section>`,
+    );
+  if (unscheduled.length) {
+    sections.push(
+      `<section class="task-manager-widget-week"><header><div><span>Anytime</span><strong>No date yet</strong></div><b>${unscheduled.length} ${unscheduled.length === 1 ? "todo" : "todos"}</b></header>${unscheduled.map(renderTask).join("")}</section>`,
+    );
+  }
+  return sections.length
+    ? `<div class="task-manager-widget-weeks">${sections.join("")}</div>`
+    : '<div class="integration-state"><strong>All clear</strong><span>No open TaskManager tasks.</span></div>';
+}
+
+export function renderTaskManager(
+  context: WidgetRenderContext,
+  dimension: WidgetDimension = "2x2",
+): string {
   const data = TaskManagerWidgetDataSchema.parse(context.data).taskManager;
   if (data.status === "loading") {
     return '<div class="integration-state"><strong>Loading tasks…</strong><span>Connecting to TaskManager</span></div>';
@@ -107,6 +168,10 @@ export function renderTaskManager(context: WidgetRenderContext): string {
   const upcomingTasks = openTasks.filter((task) => isUpcoming(task.date));
   const renderTask = (task: (typeof openTasks)[number]) =>
     `<div class="task-manager-widget-task"><i class="${task.priority ?? "normal"}"></i><span>${escapeHtml(`${task.courseCode ?? "Task"} - ${task.title}`)}</span><small>${escapeHtml(formatTaskDate(task.date, task.time))}</small></div>`;
+
+  if (dimension === "4x3" && !expanded) {
+    return `<div class="bubble-task-list">${renderWeeklyTaskManager(openTasks, renderTask)}</div><div class="widget-foot">${openTasks.length} open <span>Scroll for more</span></div>`;
+  }
 
   let content: string;
   if (expanded) {
